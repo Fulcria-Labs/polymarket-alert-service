@@ -26,6 +26,10 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 - **Real-Time Monitoring**: CRE workflow checks markets every 5 minutes
 - **Price History Tracking**: CRE builds market price history over time
 - **Trend Detection**: Momentum-based alerts (surging, trending, stable)
+- **Portfolio Tracking**: Multi-market watchlists with weighted performance
+- **Correlation Analysis**: Pearson correlation matrix between markets
+- **Divergence Detection**: Alerts when correlated markets diverge
+- **Arbitrage Detection**: Single-market & cross-market mispricing scanner
 - **Webhook Notifications**: Get notified when your conditions are met
 - **Market Search**: Find prediction markets by keyword
 
@@ -35,7 +39,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (1871 tests across 27 suites)
+# Run unit tests (1983 tests across 30 suites)
 bun test
 
 # Run integration test
@@ -68,6 +72,13 @@ The service includes a built-in web dashboard at `/` that provides:
 | `/alerts` | GET | List your alerts |
 | `/payment-info` | GET | Payment instructions |
 | `/pricing?count=10` | GET | Calculate bulk pricing |
+| `/portfolios` | POST | Create portfolio watchlist |
+| `/portfolios` | GET | List portfolios |
+| `/portfolios/:id` | GET | Portfolio performance |
+| `/portfolios/:id` | DELETE | Delete portfolio |
+| `/correlation?markets=m1,m2` | GET | Correlation matrix |
+| `/divergences?markets=m1,m2` | GET | Divergence detection |
+| `/arbitrage/scan` | POST | Scan for arbitrage opportunities |
 
 ## Creating an Alert
 
@@ -184,6 +195,7 @@ curl -X POST http://localhost:3000/alerts \
 ├── src/
 │   ├── api.ts                        # Hono API routes
 │   ├── polymarket-alert-workflow.ts  # CRE workflow
+│   ├── portfolio.ts                  # Portfolio & arbitrage
 │   └── x402-handler.ts               # Payment handling
 └── package.json
 ```
@@ -250,11 +262,49 @@ curl -X POST http://localhost:3000/alerts \
   }'
 ```
 
+## Portfolio & Arbitrage
+
+### Create Portfolio
+
+```bash
+curl -X POST http://localhost:3000/portfolios \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "election",
+    "name": "Election Portfolio",
+    "markets": [
+      {"marketId": "0x1234", "label": "Trump", "outcome": "Yes", "weight": 0.5},
+      {"marketId": "0x5678", "label": "Senate", "outcome": "Yes", "weight": 0.5}
+    ]
+  }'
+```
+
+### Correlation Analysis
+
+```bash
+curl "http://localhost:3000/correlation?markets=0x1234,0x5678,0x9abc"
+```
+
+Returns NxN Pearson correlation matrix with significance labels (strong_positive, moderate_negative, etc.)
+
+### Arbitrage Scanner
+
+```bash
+curl -X POST http://localhost:3000/arbitrage/scan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "markets": [
+      {"id": "0x1234", "question": "Will X?", "outcomes": [{"name":"Yes","price":70},{"name":"No","price":50}]}
+    ]
+  }'
+```
+
+Detects overpriced/underpriced markets where outcome prices don't sum to ~100%.
+
 ## Future Enhancements
 
 - [ ] Integration with AI models for smarter NLP parsing
 - [ ] Cross-chain payment support
-- [ ] Multi-market combo alerts
 - [ ] Telegram/Discord notification integrations
 
 ## Author

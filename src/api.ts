@@ -12,6 +12,8 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import workflow, { parseAlertRequest, parseMultiConditionAlert, extractSearchKeywords, searchMarkets, fetchMarketData, validateWebhookUrl, analyzeTrend, recordPriceSnapshot } from './polymarket-alert-workflow';
 import type { PriceSnapshot } from './polymarket-alert-workflow';
+import { createPortfolio, calculatePortfolioPerformance, recordPortfolioSnapshot, buildCorrelationMatrix, detectDivergences, scanForArbitrage } from './portfolio';
+import type { Portfolio, PortfolioSnapshot } from './portfolio';
 import x402 from './x402-handler';
 
 // Initialize state (would be persisted in production)
@@ -21,12 +23,16 @@ const state: {
   triggeredAlerts: string[];
   pendingPayments: Map<string, { nonce: string; config: any; expiry: number }>;
   priceHistory: Record<string, PriceSnapshot[]>;
+  portfolios: Map<string, Portfolio>;
+  portfolioSnapshots: Map<string, PortfolioSnapshot[]>;
 } = {
   alertConfigs: [],
   lastChecked: {},
   triggeredAlerts: [],
   pendingPayments: new Map(),
   priceHistory: {},
+  portfolios: new Map(),
+  portfolioSnapshots: new Map(),
 };
 
 const app = new Hono();
@@ -386,6 +392,118 @@ app.get('/payment-info', (c) => {
 app.get('/pricing', (c) => {
   const count = parseInt(c.req.query('count') || '1');
   return c.json(x402.calculateBulkPrice(count));
+});
+
+// --- Portfolio Management ---
+
+// Create portfolio
+app.post('/portfolios', async (c) => {
+  const body = await c.req.json();
+  const { id, name, markets } = body;
+
+  if (!id || !name || !markets || !Array.isArray(markets)) {
+    return c.json({ error: 'Missing required fields: id, name, markets[]' }, 400);
+  }
+
+  try {
+    const portfolio = createPortfolio(id, name, markets);
+    state.portfolios.set(id, portfolio);
+    state.portfolioSnapshots.set(id, []);
+    return c.json({ success: true, portfolio }, 201);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+// List portfolios
+app.get('/portfolios', (c) => {
+  const portfolios = Array.from(state.portfolios.values());
+  return c.json({
+    count: portfolios.length,
+    portfolios: portfolios.map(p => ({
+      id: p.id,
+      name: p.name,
+      marketCount: p.markets.length,
+      createdAt: new Date(p.createdAt).toISOString(),
+    })),
+  });
+});
+
+// Get portfolio performance
+app.get('/portfolios/:id', (c) => {
+  const id = c.req.param('id');
+  const portfolio = state.portfolios.get(id);
+  if (!portfolio) {
+    return c.json({ error: 'Portfolio not found' }, 404);
+  }
+
+  const performance = calculatePortfolioPerformance(portfolio, state.priceHistory);
+  return c.json({ portfolio, performance });
+});
+
+// Delete portfolio
+app.delete('/portfolios/:id', (c) => {
+  const id = c.req.param('id');
+  if (!state.portfolios.has(id)) {
+    return c.json({ error: 'Portfolio not found' }, 404);
+  }
+
+  state.portfolios.delete(id);
+  state.portfolioSnapshots.delete(id);
+  return c.json({ success: true });
+});
+
+// --- Correlation Analysis ---
+
+// Get correlation matrix for a set of markets
+app.get('/correlation', (c) => {
+  const marketIds = c.req.query('markets')?.split(',') || [];
+  const outcome = c.req.query('outcome') || 'Yes';
+
+  if (marketIds.length < 2) {
+    return c.json({ error: 'Need at least 2 market IDs (comma-separated)' }, 400);
+  }
+
+  const matrix = buildCorrelationMatrix(marketIds, state.priceHistory, outcome);
+  return c.json(matrix);
+});
+
+// Get divergences between correlated markets
+app.get('/divergences', (c) => {
+  const marketIds = c.req.query('markets')?.split(',') || [];
+  const outcome = c.req.query('outcome') || 'Yes';
+  const threshold = parseFloat(c.req.query('threshold') || '10');
+
+  if (marketIds.length < 2) {
+    return c.json({ error: 'Need at least 2 market IDs' }, 400);
+  }
+
+  const matrix = buildCorrelationMatrix(marketIds, state.priceHistory, outcome);
+  const divergences = detectDivergences(matrix, state.priceHistory, outcome, threshold);
+
+  return c.json({
+    marketCount: marketIds.length,
+    divergenceThreshold: threshold,
+    divergences,
+  });
+});
+
+// --- Arbitrage Detection ---
+
+// Scan markets for arbitrage opportunities
+app.post('/arbitrage/scan', async (c) => {
+  const body = await c.req.json();
+  const { markets, threshold } = body;
+
+  if (!markets || !Array.isArray(markets)) {
+    return c.json({ error: 'Provide markets[] array with id, question, outcomes' }, 400);
+  }
+
+  const opportunities = scanForArbitrage(markets, threshold || 3);
+  return c.json({
+    scannedCount: markets.length,
+    opportunities,
+  });
 });
 
 export default app;
