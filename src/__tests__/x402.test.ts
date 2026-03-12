@@ -295,3 +295,318 @@ describe("x402 default export", () => {
     );
   });
 });
+
+// ─── calculateBulkPrice - zero and negative edge cases ──────────────────────
+
+describe("calculateBulkPrice - edge cases", () => {
+  const BASE_PRICE = 0.01;
+
+  test("zero alerts returns zero total", () => {
+    const result = calculateBulkPrice(0);
+    expect(result.totalUsdc).toBe(0);
+    expect(result.discount).toBe(0);
+  });
+
+  test("negative alert count returns negative total (no validation)", () => {
+    const result = calculateBulkPrice(-1);
+    // Implementation does no validation, so pricePerAlert * -1 = negative
+    expect(result.totalUsdc).toBeLessThan(0);
+  });
+
+  test("very large alert count (1000) still works", () => {
+    const result = calculateBulkPrice(1000);
+    expect(result.discount).toBe(0.20); // 20% for 10+
+    expect(result.totalUsdc).toBeCloseTo(BASE_PRICE * 0.80 * 1000, 4);
+  });
+
+  test("very large alert count (1000000) does not overflow", () => {
+    const result = calculateBulkPrice(1000000);
+    expect(result.totalUsdc).toBeGreaterThan(0);
+    expect(isFinite(result.totalUsdc)).toBe(true);
+  });
+
+  test("NaN alert count returns NaN total", () => {
+    const result = calculateBulkPrice(NaN);
+    expect(isNaN(result.totalUsdc)).toBe(true);
+  });
+
+  test("discount is exactly 0 for counts 1-4", () => {
+    for (let i = 1; i <= 4; i++) {
+      const result = calculateBulkPrice(i);
+      expect(result.discount).toBe(0);
+    }
+  });
+
+  test("discount is exactly 0.10 for counts 5-9", () => {
+    for (let i = 5; i <= 9; i++) {
+      const result = calculateBulkPrice(i);
+      expect(result.discount).toBe(0.10);
+    }
+  });
+
+  test("discount is exactly 0.20 for counts 10+", () => {
+    for (const count of [10, 11, 15, 20, 50, 100]) {
+      const result = calculateBulkPrice(count);
+      expect(result.discount).toBe(0.20);
+    }
+  });
+
+  test("boundary: count=4 has 0% discount, count=5 has 10%", () => {
+    const r4 = calculateBulkPrice(4);
+    const r5 = calculateBulkPrice(5);
+    expect(r4.discount).toBe(0);
+    expect(r5.discount).toBe(0.10);
+    expect(r5.pricePerAlert).toBeLessThan(r4.pricePerAlert);
+  });
+
+  test("boundary: count=9 has 10% discount, count=10 has 20%", () => {
+    const r9 = calculateBulkPrice(9);
+    const r10 = calculateBulkPrice(10);
+    expect(r9.discount).toBe(0.10);
+    expect(r10.discount).toBe(0.20);
+    expect(r10.pricePerAlert).toBeLessThan(r9.pricePerAlert);
+  });
+
+  test("floating point count (5.5) still computes", () => {
+    const result = calculateBulkPrice(5.5);
+    expect(result.discount).toBe(0.10);
+    expect(result.totalUsdc).toBeCloseTo(BASE_PRICE * 0.90 * 5.5, 6);
+  });
+
+  test("Infinity count returns Infinity total", () => {
+    const result = calculateBulkPrice(Infinity);
+    expect(result.totalUsdc).toBe(Infinity);
+  });
+});
+
+// ─── createPaymentRequired - edge cases ─────────────────────────────────────
+
+describe("createPaymentRequired - edge cases", () => {
+  test("handles empty resource string", () => {
+    const result = createPaymentRequired("", "desc");
+    expect(result.body.resource).toBe("");
+    expect(result.status).toBe(402);
+  });
+
+  test("handles empty description string", () => {
+    const result = createPaymentRequired("/alerts", "");
+    expect(result.body.description).toBe("");
+    expect(result.status).toBe(402);
+  });
+
+  test("handles very long resource string", () => {
+    const longResource = "/" + "a".repeat(1000);
+    const result = createPaymentRequired(longResource, "desc");
+    expect(result.body.resource).toBe(longResource);
+  });
+
+  test("handles special characters in description", () => {
+    const result = createPaymentRequired("/alerts", "<script>alert('xss')</script>");
+    expect(result.body.description).toBe("<script>alert('xss')</script>");
+  });
+
+  test("handles unicode in description", () => {
+    const result = createPaymentRequired("/alerts", "Test alert \u2192 monitor");
+    expect(result.body.description).toContain("\u2192");
+  });
+
+  test("nonce length is consistent across calls", () => {
+    const r1 = createPaymentRequired("/a", "d");
+    const r2 = createPaymentRequired("/b", "d");
+    expect(r1.body.nonce.length).toBe(r2.body.nonce.length);
+  });
+
+  test("payTo address is always present", () => {
+    const result = createPaymentRequired("/alerts", "desc");
+    expect(result.body.payTo.length).toBeGreaterThan(2);
+    expect(result.body.payTo.startsWith("0x")).toBe(true);
+  });
+
+  test("maxAmountRequired is always the alert price", () => {
+    const result = createPaymentRequired("/resource", "any desc");
+    expect(result.body.maxAmountRequired).toBe("10000");
+  });
+
+  test("expiry is always in the future", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const result = createPaymentRequired("/alerts", "desc");
+    expect(result.body.expiry).toBeGreaterThan(now);
+  });
+
+  test("all three headers are present", () => {
+    const result = createPaymentRequired("/alerts", "desc");
+    expect(Object.keys(result.headers).length).toBe(3);
+  });
+});
+
+// ─── verifyPayment - additional edge cases ──────────────────────────────────
+
+describe("verifyPayment - additional edge cases", () => {
+  test("rejects chain ID 0", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 0,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/chain/i);
+  });
+
+  test("rejects negative chain ID", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: -1,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("rejects Polygon chain ID (137)", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 137,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/Base/);
+  });
+
+  test("rejects Arbitrum chain ID (42161)", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 42161,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("rejects Optimism chain ID (10)", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 10,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("rejects BSC chain ID (56)", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 56,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("rejects Avalanche chain ID (43114)", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 43114,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("correct chain ID (8453) proceeds to RPC check", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0x0000000000000000000000000000000000000000000000000000000000000001",
+      blockNumber: 1,
+      chainId: 8453,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    // Should fail at RPC level, not chain ID level
+    expect(result.valid).toBe(false);
+    expect(result.error).not.toMatch(/chain/i);
+  });
+
+  test("error message always has a string type when invalid", async () => {
+    const result = await verifyPayment({
+      transactionHash: "0xabc",
+      blockNumber: 1,
+      chainId: 999,
+      payer: "0x1234",
+      amount: "10000",
+    });
+    expect(result.valid).toBe(false);
+    expect(typeof result.error).toBe("string");
+    expect(result.error!.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── getPaymentInstructions - additional checks ─────────────────────────────
+
+describe("getPaymentInstructions - formatting", () => {
+  test("starts with markdown heading", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toMatch(/^##/);
+  });
+
+  test("contains numbered steps", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("1.");
+    expect(instructions).toContain("2.");
+    expect(instructions).toContain("3.");
+    expect(instructions).toContain("4.");
+  });
+
+  test("mentions Send To field", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("Send To");
+  });
+
+  test("mentions Amount field", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("Amount");
+  });
+
+  test("mentions Token field", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("Token");
+  });
+
+  test("mentions Network field", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("Network");
+  });
+
+  test("mentions Coinbase Wallet", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("Coinbase Wallet");
+  });
+
+  test("mentions MetaMask", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("MetaMask");
+  });
+
+  test("mentions Rainbow wallet", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions).toContain("Rainbow");
+  });
+
+  test("contains transaction hash instruction", () => {
+    const instructions = getPaymentInstructions();
+    expect(instructions.toLowerCase()).toContain("transaction hash");
+  });
+
+  test("is deterministic (same output each call)", () => {
+    const a = getPaymentInstructions();
+    const b = getPaymentInstructions();
+    expect(a).toBe(b);
+  });
+});
