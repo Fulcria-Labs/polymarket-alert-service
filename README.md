@@ -33,7 +33,10 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run tests
+# Run unit tests (159 tests)
+bun test
+
+# Run integration test
 bun run index.ts --test
 
 # Start API server
