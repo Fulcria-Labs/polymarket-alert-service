@@ -680,7 +680,7 @@ describe("CRE Integration Mocks", () => {
   });
 
   test("workflow exports version string", () => {
-    expect(workflow.version).toBe("1.0.0");
+    expect(workflow.version).toBe("1.1.0");
   });
 
   test("workflow exports description for CRE catalog", () => {

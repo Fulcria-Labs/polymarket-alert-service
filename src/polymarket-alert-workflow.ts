@@ -30,20 +30,43 @@ interface PolymarketMarket {
   volume?: number;
 }
 
+// Price snapshot for history tracking
+export interface PriceSnapshot {
+  timestamp: number;
+  prices: Record<string, number>;  // outcome -> price percentage
+}
+
+// Trend analysis result
+export interface TrendAnalysis {
+  outcome: string;
+  currentPrice: number;
+  changePercent1h: number | null;   // % change in last hour
+  changePercent6h: number | null;   // % change in last 6 hours
+  changePercent24h: number | null;  // % change in last 24 hours
+  momentum: 'surging_up' | 'trending_up' | 'stable' | 'trending_down' | 'surging_down';
+  volatility: number;               // Standard deviation of recent prices
+  dataPoints: number;
+}
+
 // Configuration for alert conditions
-interface AlertConfig {
+export interface AlertConfig {
   marketId: string;
   outcome: string;      // "Yes" or "No"
   threshold: number;    // 0-100 representing percentage
   direction: 'above' | 'below';
   notifyUrl: string;    // Webhook to call when condition met
+  type?: 'threshold' | 'trend';  // Alert type (default: threshold)
+  trendDirection?: 'up' | 'down';  // For trend alerts
+  trendMinChange?: number;          // Min % change to trigger (e.g., 5 = 5%)
+  trendWindow?: number;             // Time window in ms (default: 1 hour)
 }
 
 // Workflow state persisted across runs
-interface WorkflowState {
+export interface WorkflowState {
   alertConfigs: AlertConfig[];
   lastChecked: Record<string, number>;  // marketId -> timestamp
   triggeredAlerts: string[];            // Already sent alerts
+  priceHistory: Record<string, PriceSnapshot[]>;  // marketId -> snapshots
 }
 
 /**
@@ -89,25 +112,123 @@ function checkAlertCondition(market: PolymarketMarket, config: AlertConfig): boo
 }
 
 /**
+ * SSRF Protection: Validate webhook URLs before sending
+ *
+ * Prevents alerts from being sent to internal/private network addresses
+ * which could be exploited for Server-Side Request Forgery attacks.
+ */
+const BLOCKED_HOSTNAMES = new Set([
+  'localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]',
+  'metadata.google.internal', '169.254.169.254',
+  'metadata.google.com', 'metadata',
+]);
+
+const PRIVATE_IP_RANGES = [
+  /^10\./,                          // 10.0.0.0/8
+  /^172\.(1[6-9]|2\d|3[01])\./,    // 172.16.0.0/12
+  /^192\.168\./,                     // 192.168.0.0/16
+  /^127\./,                          // 127.0.0.0/8
+  /^0\./,                            // 0.0.0.0/8
+  /^169\.254\./,                     // Link-local
+  /^fc/i,                            // IPv6 ULA
+  /^fd/i,                            // IPv6 ULA
+  /^fe80/i,                          // IPv6 link-local
+];
+
+export function validateWebhookUrl(url: string): { valid: boolean; error?: string } {
+  try {
+    const parsed = new URL(url);
+
+    // Only allow HTTPS (and HTTP for development)
+    if (!['https:', 'http:'].includes(parsed.protocol)) {
+      return { valid: false, error: 'Webhook URL must use HTTP or HTTPS protocol' };
+    }
+
+    // Block file://, ftp://, etc.
+    if (parsed.protocol === 'file:' || parsed.protocol === 'ftp:') {
+      return { valid: false, error: 'Invalid protocol for webhook URL' };
+    }
+
+    // Block known internal hostnames
+    const hostname = parsed.hostname.toLowerCase();
+    if (BLOCKED_HOSTNAMES.has(hostname)) {
+      return { valid: false, error: 'Webhook URL points to a blocked internal address' };
+    }
+
+    // Block private IP ranges
+    for (const range of PRIVATE_IP_RANGES) {
+      if (range.test(hostname)) {
+        return { valid: false, error: 'Webhook URL points to a private network address' };
+      }
+    }
+
+    // Block URLs with credentials
+    if (parsed.username || parsed.password) {
+      return { valid: false, error: 'Webhook URL must not contain credentials' };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Invalid webhook URL format' };
+  }
+}
+
+/**
+ * Webhook Signature Verification (HMAC-SHA256)
+ *
+ * Signs outgoing webhook payloads so recipients can verify authenticity.
+ * The signature is sent in the X-Webhook-Signature header.
+ */
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'polymarket-alerts-default-secret';
+
+export async function signWebhookPayload(payload: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(WEBHOOK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+  const hashArray = Array.from(new Uint8Array(signature));
+  return 'sha256=' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Send alert notification via webhook
  */
 async function sendAlert(config: AlertConfig, market: PolymarketMarket, currentPrice: number): Promise<boolean> {
+  // Validate webhook URL against SSRF
+  const urlCheck = validateWebhookUrl(config.notifyUrl);
+  if (!urlCheck.valid) {
+    console.error(`SSRF blocked: ${urlCheck.error} - ${config.notifyUrl}`);
+    return false;
+  }
+
   try {
+    const body = JSON.stringify({
+      type: 'prediction_market_alert',
+      marketId: config.marketId,
+      question: market.question,
+      outcome: config.outcome,
+      threshold: config.threshold,
+      direction: config.direction,
+      currentPrice: currentPrice.toFixed(2),
+      triggeredAt: new Date().toISOString(),
+    });
+
+    // Sign the payload
+    const signature = await signWebhookPayload(body);
+
     const response = await fetch(config.notifyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Webhook-Signature': signature,
+        'X-Webhook-Timestamp': Math.floor(Date.now() / 1000).toString(),
       },
-      body: JSON.stringify({
-        type: 'prediction_market_alert',
-        marketId: config.marketId,
-        question: market.question,
-        outcome: config.outcome,
-        threshold: config.threshold,
-        direction: config.direction,
-        currentPrice: currentPrice.toFixed(2),
-        triggeredAt: new Date().toISOString(),
-      }),
+      body,
     });
 
     return response.ok;
@@ -115,6 +236,155 @@ async function sendAlert(config: AlertConfig, market: PolymarketMarket, currentP
     console.error('Failed to send alert:', error);
     return false;
   }
+}
+
+/**
+ * Record a price snapshot for a market
+ * Called during each CRE execution to build price history
+ */
+export function recordPriceSnapshot(
+  priceHistory: Record<string, PriceSnapshot[]>,
+  marketId: string,
+  market: PolymarketMarket,
+  maxSnapshots: number = 288  // 24h of 5-min intervals
+): void {
+  if (!priceHistory[marketId]) {
+    priceHistory[marketId] = [];
+  }
+
+  const snapshot: PriceSnapshot = {
+    timestamp: Date.now(),
+    prices: {},
+  };
+
+  for (const token of market.tokens) {
+    snapshot.prices[token.outcome] = token.price * 100;
+  }
+
+  priceHistory[marketId].push(snapshot);
+
+  // Trim old snapshots to keep memory bounded
+  if (priceHistory[marketId].length > maxSnapshots) {
+    priceHistory[marketId] = priceHistory[marketId].slice(-maxSnapshots);
+  }
+}
+
+/**
+ * Analyze price trend for a market outcome
+ * Uses price history to compute momentum, volatility, and directional changes
+ */
+export function analyzeTrend(
+  snapshots: PriceSnapshot[],
+  outcome: string,
+): TrendAnalysis {
+  const now = Date.now();
+  const relevantSnapshots = snapshots
+    .filter(s => s.prices[outcome] !== undefined)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  if (relevantSnapshots.length === 0) {
+    return {
+      outcome,
+      currentPrice: 0,
+      changePercent1h: null,
+      changePercent6h: null,
+      changePercent24h: null,
+      momentum: 'stable',
+      volatility: 0,
+      dataPoints: 0,
+    };
+  }
+
+  const currentPrice = relevantSnapshots[relevantSnapshots.length - 1].prices[outcome];
+
+  // Calculate changes over time windows
+  const findPriceAt = (msAgo: number): number | null => {
+    const targetTime = now - msAgo;
+    // Find closest snapshot to the target time
+    let closest: PriceSnapshot | null = null;
+    let closestDiff = Infinity;
+    for (const s of relevantSnapshots) {
+      const diff = Math.abs(s.timestamp - targetTime);
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closest = s;
+      }
+    }
+    // Only use if within 20% of the target window
+    if (closest && closestDiff < msAgo * 0.2) {
+      return closest.prices[outcome];
+    }
+    return null;
+  };
+
+  const price1hAgo = findPriceAt(3600000);       // 1 hour
+  const price6hAgo = findPriceAt(21600000);       // 6 hours
+  const price24hAgo = findPriceAt(86400000);      // 24 hours
+
+  const changePercent1h = price1hAgo !== null ? currentPrice - price1hAgo : null;
+  const changePercent6h = price6hAgo !== null ? currentPrice - price6hAgo : null;
+  const changePercent24h = price24hAgo !== null ? currentPrice - price24hAgo : null;
+
+  // Calculate volatility (standard deviation of recent prices)
+  const recentPrices = relevantSnapshots.slice(-12).map(s => s.prices[outcome]);
+  const mean = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
+  const variance = recentPrices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / recentPrices.length;
+  const volatility = Math.sqrt(variance);
+
+  // Determine momentum based on short-term change
+  let momentum: TrendAnalysis['momentum'] = 'stable';
+  if (changePercent1h !== null) {
+    if (changePercent1h >= 5) momentum = 'surging_up';
+    else if (changePercent1h >= 2) momentum = 'trending_up';
+    else if (changePercent1h <= -5) momentum = 'surging_down';
+    else if (changePercent1h <= -2) momentum = 'trending_down';
+  }
+
+  return {
+    outcome,
+    currentPrice,
+    changePercent1h,
+    changePercent6h,
+    changePercent24h,
+    momentum,
+    volatility: parseFloat(volatility.toFixed(2)),
+    dataPoints: relevantSnapshots.length,
+  };
+}
+
+/**
+ * Check if a trend-based alert condition is met
+ */
+function checkTrendCondition(
+  priceHistory: Record<string, PriceSnapshot[]>,
+  config: AlertConfig,
+): boolean {
+  const snapshots = priceHistory[config.marketId];
+  if (!snapshots || snapshots.length < 2) return false;
+
+  const trend = analyzeTrend(snapshots, config.outcome);
+  const window = config.trendWindow || 3600000; // Default 1 hour
+  const minChange = config.trendMinChange || 5;
+
+  // Select the appropriate change window
+  let change: number | null;
+  if (window <= 3600000) {
+    change = trend.changePercent1h;
+  } else if (window <= 21600000) {
+    change = trend.changePercent6h;
+  } else {
+    change = trend.changePercent24h;
+  }
+
+  if (change === null) return false;
+
+  if (config.trendDirection === 'up') {
+    return change >= minChange;
+  } else if (config.trendDirection === 'down') {
+    return change <= -minChange;
+  }
+
+  return Math.abs(change) >= minChange;
 }
 
 /**
@@ -128,6 +398,11 @@ export async function executeWorkflow(state: WorkflowState): Promise<{
 }> {
   const alerts: string[] = [];
   const now = Date.now();
+
+  // Initialize price history if not present
+  if (!state.priceHistory) {
+    state.priceHistory = {};
+  }
 
   for (const config of state.alertConfigs) {
     // Skip if already triggered (unless we want repeating alerts)
@@ -150,8 +425,20 @@ export async function executeWorkflow(state: WorkflowState): Promise<{
       continue;
     }
 
-    // Check condition
-    if (checkAlertCondition(market, config)) {
+    // Record price snapshot for history tracking
+    recordPriceSnapshot(state.priceHistory, config.marketId, market);
+
+    // Check condition based on alert type
+    const alertType = config.type || 'threshold';
+    let conditionMet = false;
+
+    if (alertType === 'trend') {
+      conditionMet = checkTrendCondition(state.priceHistory, config);
+    } else {
+      conditionMet = checkAlertCondition(market, config);
+    }
+
+    if (conditionMet) {
       const token = market.tokens.find(t =>
         t.outcome.toLowerCase() === config.outcome.toLowerCase()
       );
@@ -161,7 +448,10 @@ export async function executeWorkflow(state: WorkflowState): Promise<{
       const sent = await sendAlert(config, market, currentPrice);
       if (sent) {
         state.triggeredAlerts.push(alertKey);
-        alerts.push(`Alert triggered: ${market.question} - ${config.outcome} at ${currentPrice.toFixed(1)}%`);
+        const alertMsg = alertType === 'trend'
+          ? `Trend alert: ${market.question} - ${config.outcome} ${config.trendDirection} by ${config.trendMinChange}%+`
+          : `Alert triggered: ${market.question} - ${config.outcome} at ${currentPrice.toFixed(1)}%`;
+        alerts.push(alertMsg);
       }
     }
   }
@@ -185,6 +475,107 @@ export async function executeWorkflow(state: WorkflowState): Promise<{
 interface ParsePattern {
   regex: RegExp;
   extractor: (match: RegExpMatchArray) => Partial<AlertConfig> | null;
+}
+
+/**
+ * Levenshtein distance for fuzzy matching
+ * Enables typo-tolerant NLP parsing (e.g., "exceeed", "bellow", "abve")
+ */
+export function levenshteinDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+/**
+ * Fuzzy match a word against a list of keywords
+ * Returns the best match if within the allowed edit distance
+ */
+export function fuzzyMatch(word: string, keywords: string[], maxDistance: number = 2): string | null {
+  const lower = word.toLowerCase();
+  let bestMatch: string | null = null;
+  let bestDist = Infinity;
+
+  for (const kw of keywords) {
+    // Exact substring check first
+    if (lower.includes(kw)) return kw;
+
+    // For multi-word keywords, check if they appear in the text
+    if (kw.includes(' ') && lower.includes(kw)) return kw;
+
+    // Single-word fuzzy match
+    if (!kw.includes(' ')) {
+      const dist = levenshteinDistance(lower, kw);
+      if (dist < bestDist && dist <= maxDistance) {
+        bestDist = dist;
+        bestMatch = kw;
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
+/**
+ * Fuzzy-match direction keywords in text
+ * Handles typos like "exceeed", "abve", "bellow", "drps"
+ *
+ * Uses best-match strategy: checks all keywords in both directions
+ * and picks the one with the lowest edit distance.
+ */
+export function fuzzyDetectDirection(text: string): 'above' | 'below' | null {
+  const words = text.toLowerCase().split(/\s+/);
+
+  // Check exact matches first (fast path)
+  const exactDir = detectDirection(text);
+  if (exactDir) return exactDir;
+
+  // Fuzzy match: find the closest keyword across both lists
+  // Also extract first words from multi-word keywords (e.g., "drops" from "drops to")
+  const aboveSingle = [...new Set([
+    ...ABOVE_KEYWORDS.filter(k => !k.includes(' ')),
+    ...ABOVE_KEYWORDS.filter(k => k.includes(' ')).map(k => k.split(' ')[0]),
+  ])];
+  const belowSingle = [...new Set([
+    ...BELOW_KEYWORDS.filter(k => !k.includes(' ')),
+    ...BELOW_KEYWORDS.filter(k => k.includes(' ')).map(k => k.split(' ')[0]),
+  ])];
+
+  let bestDir: 'above' | 'below' | null = null;
+  let bestDist = Infinity;
+
+  for (const word of words) {
+    if (word.length < 3) continue;
+
+    // Check above keywords
+    for (const kw of aboveSingle) {
+      const dist = levenshteinDistance(word, kw);
+      if (dist <= 2 && dist < bestDist) {
+        bestDist = dist;
+        bestDir = 'above';
+      }
+    }
+
+    // Check below keywords
+    for (const kw of belowSingle) {
+      const dist = levenshteinDistance(word, kw);
+      if (dist <= 2 && dist < bestDist) {
+        bestDist = dist;
+        bestDir = 'below';
+      }
+    }
+  }
+
+  return bestDir;
 }
 
 // Keywords for direction detection
@@ -329,9 +720,9 @@ export function parseAlertRequest(request: string, notifyUrl: string): AlertConf
     }
   }
 
-  // Fallback: Extract what we can
+  // Fallback: Extract what we can (with fuzzy matching for typos)
   const percentage = extractPercentage(request);
-  const direction = detectDirection(request);
+  const direction = detectDirection(request) || fuzzyDetectDirection(request);
 
   if (percentage !== null && direction !== null) {
     return {
@@ -447,13 +838,15 @@ export async function searchMarkets(query: string): Promise<PolymarketMarket[]> 
 // Export for CRE workflow registration
 export default {
   name: 'polymarket-alerts',
-  version: '1.0.0',
-  description: 'Monitor prediction markets and send alerts when conditions are met',
+  version: '1.1.0',
+  description: 'Monitor prediction markets with threshold and trend alerts via CRE',
   triggers: ['cron:*/5 * * * *'], // Check every 5 minutes
   execute: executeWorkflow,
   helpers: {
     parseAlertRequest,
     searchMarkets,
     fetchMarketData,
+    analyzeTrend,
+    recordPriceSnapshot,
   },
 };

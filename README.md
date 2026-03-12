@@ -24,6 +24,8 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 - **x402 Micropayments**: Pay $0.01 USDC per alert subscription on Base
 - **Bulk Discounts**: 10% off for 5+ alerts, 20% off for 10+ alerts
 - **Real-Time Monitoring**: CRE workflow checks markets every 5 minutes
+- **Price History Tracking**: CRE builds market price history over time
+- **Trend Detection**: Momentum-based alerts (surging, trending, stable)
 - **Webhook Notifications**: Get notified when your conditions are met
 - **Market Search**: Find prediction markets by keyword
 
@@ -33,7 +35,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (1776 tests across 24 suites)
+# Run unit tests (1871 tests across 27 suites)
 bun test
 
 # Run integration test
@@ -50,6 +52,8 @@ bun run index.ts
 | `/health` | GET | Health check |
 | `/markets/search?q=election` | GET | Search prediction markets |
 | `/markets/:id` | GET | Get market details |
+| `/markets/:id/history?hours=24` | GET | Price history (CRE-tracked) |
+| `/markets/:id/trend?outcome=Yes` | GET | Trend analysis & momentum |
 | `/alerts` | POST | Create alert (x402 payment required) |
 | `/alerts` | GET | List your alerts |
 | `/payment-info` | GET | Payment instructions |
@@ -180,11 +184,64 @@ BASE_RPC_URL=               # Base RPC endpoint
 PAYMENT_RECEIVER=           # USDC receiver address
 ```
 
+## Trend Detection
+
+The service tracks market prices over time via CRE's scheduled execution, enabling trend-based alerts in addition to simple threshold alerts.
+
+### Get Market Trend
+
+```bash
+curl http://localhost:3000/markets/0x1234/trend?outcome=Yes
+```
+
+Response:
+```json
+{
+  "marketId": "0x1234",
+  "trend": {
+    "outcome": "Yes",
+    "currentPrice": 65.0,
+    "changePercent1h": 8.5,
+    "changePercent6h": 15.2,
+    "changePercent24h": 22.0,
+    "momentum": "surging_up",
+    "volatility": 3.2,
+    "dataPoints": 48
+  }
+}
+```
+
+### Momentum Labels
+
+| Label | 1h Change |
+|-------|-----------|
+| `surging_up` | >= +5% |
+| `trending_up` | +2% to +5% |
+| `stable` | -2% to +2% |
+| `trending_down` | -5% to -2% |
+| `surging_down` | <= -5% |
+
+### Create Trend Alert
+
+```bash
+curl -X POST http://localhost:3000/alerts \
+  -H "Content-Type: application/json" \
+  -H "X-Payment-Proof: ..." \
+  -d '{
+    "marketId": "0x...",
+    "outcome": "Yes",
+    "notifyUrl": "https://your-webhook.com/alerts",
+    "type": "trend",
+    "trendDirection": "up",
+    "trendMinChange": 5,
+    "trendWindow": 3600000
+  }'
+```
+
 ## Future Enhancements
 
 - [ ] Integration with AI models for smarter NLP parsing
 - [ ] Cross-chain payment support
-- [ ] Historical alert analytics
 - [ ] Multi-market combo alerts
 - [ ] Telegram/Discord notification integrations
 

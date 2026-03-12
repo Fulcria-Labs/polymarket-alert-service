@@ -777,7 +777,7 @@ describe("workflow default export", () => {
   test("exports name and version", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
     expect(wf.name).toBe("polymarket-alerts");
-    expect(wf.version).toBe("1.0.0");
+    expect(wf.version).toBe("1.1.0");
   });
 
   test("exports execute function", async () => {

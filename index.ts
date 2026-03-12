@@ -95,13 +95,15 @@ console.log(`
 
 console.log(`Starting server on port ${PORT}...`);
 console.log(`\nEndpoints:`);
-console.log(`  GET  /health          - Health check`);
-console.log(`  GET  /markets/search  - Search prediction markets`);
-console.log(`  GET  /markets/:id     - Get market details`);
-console.log(`  POST /alerts          - Create alert (x402 payment)`);
-console.log(`  GET  /alerts          - List alerts`);
-console.log(`  GET  /payment-info    - Payment instructions`);
-console.log(`  GET  /pricing         - Calculate bulk pricing`);
+console.log(`  GET  /health              - Health check`);
+console.log(`  GET  /markets/search      - Search prediction markets`);
+console.log(`  GET  /markets/:id         - Get market details`);
+console.log(`  GET  /markets/:id/history - Price history (CRE-tracked)`);
+console.log(`  GET  /markets/:id/trend   - Trend analysis & momentum`);
+console.log(`  POST /alerts              - Create alert (x402 payment)`);
+console.log(`  GET  /alerts              - List alerts`);
+console.log(`  GET  /payment-info        - Payment instructions`);
+console.log(`  GET  /pricing             - Calculate bulk pricing`);
 console.log('');
 
 serve({

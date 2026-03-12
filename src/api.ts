@@ -10,7 +10,8 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import workflow, { parseAlertRequest, parseMultiConditionAlert, extractSearchKeywords, searchMarkets, fetchMarketData } from './polymarket-alert-workflow';
+import workflow, { parseAlertRequest, parseMultiConditionAlert, extractSearchKeywords, searchMarkets, fetchMarketData, validateWebhookUrl, analyzeTrend, recordPriceSnapshot } from './polymarket-alert-workflow';
+import type { PriceSnapshot } from './polymarket-alert-workflow';
 import x402 from './x402-handler';
 
 // Initialize state (would be persisted in production)
@@ -19,11 +20,13 @@ const state: {
   lastChecked: Record<string, number>;
   triggeredAlerts: string[];
   pendingPayments: Map<string, { nonce: string; config: any; expiry: number }>;
+  priceHistory: Record<string, PriceSnapshot[]>;
 } = {
   alertConfigs: [],
   lastChecked: {},
   triggeredAlerts: [],
   pendingPayments: new Map(),
+  priceHistory: {},
 };
 
 const app = new Hono();
@@ -85,6 +88,52 @@ app.get('/markets/:id', async (c) => {
     })),
     volume: market.volume,
   });
+});
+
+// Get price history for a market
+app.get('/markets/:id/history', async (c) => {
+  const marketId = c.req.param('id');
+  const hours = parseInt(c.req.query('hours') || '24');
+  const snapshots = state.priceHistory[marketId] || [];
+
+  // Filter by time window
+  const cutoff = Date.now() - (hours * 3600000);
+  const filtered = snapshots.filter(s => s.timestamp >= cutoff);
+
+  return c.json({
+    marketId,
+    hours,
+    dataPoints: filtered.length,
+    history: filtered.map(s => ({
+      timestamp: new Date(s.timestamp).toISOString(),
+      prices: s.prices,
+    })),
+  });
+});
+
+// Get trend analysis for a market
+app.get('/markets/:id/trend', async (c) => {
+  const marketId = c.req.param('id');
+  const outcome = c.req.query('outcome') || 'Yes';
+  const snapshots = state.priceHistory[marketId];
+
+  if (!snapshots || snapshots.length === 0) {
+    // Try to seed with current data
+    const market = await fetchMarketData(marketId);
+    if (market) {
+      recordPriceSnapshot(state.priceHistory, marketId, market);
+      const trend = analyzeTrend(state.priceHistory[marketId], outcome);
+      return c.json({
+        marketId,
+        trend,
+        note: 'First data point recorded. Trend analysis improves with more history.',
+      });
+    }
+    return c.json({ error: 'No price history available for this market' }, 404);
+  }
+
+  const trend = analyzeTrend(snapshots, outcome);
+  return c.json({ marketId, trend });
 });
 
 // Create alert - requires x402 payment
@@ -253,6 +302,12 @@ app.post('/alerts', async (c) => {
     return c.json({
       error: 'Missing required fields: marketId, threshold, notifyUrl',
     }, 400);
+  }
+
+  // Validate webhook URL against SSRF
+  const webhookCheck = validateWebhookUrl(notifyUrl);
+  if (!webhookCheck.valid) {
+    return c.json({ error: `Invalid webhook URL: ${webhookCheck.error}` }, 400);
   }
 
   // Verify market exists

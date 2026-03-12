@@ -626,7 +626,7 @@ describe("GET /health - additional", () => {
   test("version matches workflow version", async () => {
     const res = await req("GET", "/health");
     const body = await res.json();
-    expect(body.version).toBe("1.0.0");
+    expect(body.version).toBe("1.1.0");
   });
 
   test("alertCount is non-negative", async () => {

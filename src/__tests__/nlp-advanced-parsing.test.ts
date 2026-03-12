@@ -19,16 +19,20 @@ const NOTIFY = "https://hook.test/nlp-adv";
 // ─── Typos and misspellings ─────────────────────────────────────────────────
 
 describe("NLP - typos and misspellings", () => {
-  test("parses 'exceeed' with triple-e as garbage (no match)", () => {
+  test("parses 'exceeed' with triple-e via fuzzy matching", () => {
     const result = parseAlertRequest("when Trump exceeed 60%", NOTIFY);
-    // 'exceeed' won't match 'exceed' so falls to percentage+direction fallback
-    // no direction keyword either, so null
-    expect(result).toBeNull();
+    // Fuzzy NLP detects 'exceeed' as close to 'exceed' (Levenshtein distance 1)
+    expect(result).not.toBeNull();
+    expect(result!.threshold).toBe(60);
+    expect(result!.direction).toBe("above");
   });
 
-  test("parses 'abov' (truncated above) - no match", () => {
+  test("parses 'abov' (truncated above) via fuzzy matching", () => {
     const result = parseAlertRequest("when Trump abov 60%", NOTIFY);
-    expect(result).toBeNull();
+    // Fuzzy NLP detects 'abov' as close to 'above' (distance 1)
+    expect(result).not.toBeNull();
+    expect(result!.threshold).toBe(60);
+    expect(result!.direction).toBe("above");
   });
 
   test("parses correct spelling 'exceeds' with trailing space", () => {
@@ -38,14 +42,20 @@ describe("NLP - typos and misspellings", () => {
     expect(result!.direction).toBe("above");
   });
 
-  test("handles 'bellow' (common misspelling of below) - no match", () => {
+  test("handles 'bellow' (common misspelling of below) via fuzzy matching", () => {
     const result = parseAlertRequest("when price bellow 30%", NOTIFY);
-    expect(result).toBeNull();
+    // Fuzzy NLP detects 'bellow' as close to 'below' (distance 1)
+    expect(result).not.toBeNull();
+    expect(result!.threshold).toBe(30);
+    expect(result!.direction).toBe("below");
   });
 
-  test("handles 'aboive' typo - no match for direction", () => {
+  test("handles 'aboive' typo via fuzzy matching", () => {
     const result = parseAlertRequest("when Bitcoin aboive 55%", NOTIFY);
-    expect(result).toBeNull();
+    // Fuzzy NLP detects 'aboive' as close to 'above' (distance 2)
+    expect(result).not.toBeNull();
+    expect(result!.threshold).toBe(55);
+    expect(result!.direction).toBe("above");
   });
 });
 
