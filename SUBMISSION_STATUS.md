@@ -2,8 +2,8 @@
 
 **Project:** Polymarket Alert Service
 **Track:** AI Agents + Prediction Markets
-**Deadline:** March 1, 2026 (12 days remaining)
-**Prize Pool:** $120,000
+**Deadline:** March 27, 2026 (15 days remaining)
+**Prize Pool:** $120,000+
 
 ## Submission Requirements
 
@@ -68,4 +68,4 @@ Can submit with current terminal demo - it shows working functionality but lacks
 Record proper demo with voice following DEMO_SCRIPT.md for more competitive entry.
 
 ---
-*Last updated: 2026-02-16 05:51 UTC*
+*Last updated: 2026-03-12 12:30 UTC*

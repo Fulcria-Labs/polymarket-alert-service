@@ -33,7 +33,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (1670 tests across 21 suites)
+# Run unit tests (1776 tests across 24 suites)
 bun test
 
 # Run integration test
