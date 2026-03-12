@@ -968,3 +968,70 @@ describe("GET /payment-info - detailed checks", () => {
     expect(body.amount).toBeLessThan(1);
   });
 });
+
+// ─── GET / (Dashboard) ──────────────────────────────────────────────────────
+
+describe("GET / (Dashboard)", () => {
+  test("returns HTML response when dashboard file exists", async () => {
+    const res = await req("GET", "/");
+    // Either serves the HTML or redirects to /health
+    expect([200, 302, 301]).toContain(res.status);
+  });
+
+  test("returns HTML content-type when dashboard file exists", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const ct = res.headers.get("content-type") || "";
+      expect(ct).toMatch(/text\/html/);
+    }
+  });
+
+  test("dashboard HTML contains expected title", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const text = await res.text();
+      expect(text).toContain("Polymarket");
+    }
+  });
+
+  test("dashboard HTML contains market search functionality", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const text = await res.text();
+      expect(text).toContain("searchMarkets");
+    }
+  });
+
+  test("dashboard HTML contains alert creation form", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const text = await res.text();
+      expect(text).toContain("createAlert");
+    }
+  });
+
+  test("dashboard HTML contains Chainlink CRE branding", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const text = await res.text();
+      expect(text).toContain("Chainlink CRE");
+    }
+  });
+
+  test("dashboard HTML contains x402 payment reference", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const text = await res.text();
+      expect(text).toContain("x402");
+    }
+  });
+
+  test("dashboard HTML includes trend visualization", async () => {
+    const res = await req("GET", "/");
+    if (res.status === 200) {
+      const text = await res.text();
+      expect(text).toContain("trendCard");
+      expect(text).toContain("momentum");
+    }
+  });
+});

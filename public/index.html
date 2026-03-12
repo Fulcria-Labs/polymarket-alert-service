@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polymarket Alert Service | Chainlink CRE + x402</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #375bd2;
+      --accent-light: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --orange: #db6d28;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+    /* Header */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+    }
+    header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .logo h1 { font-size: 18px; font-weight: 600; }
+    .logo span { color: var(--text-muted); font-size: 13px; }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--green);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Main layout */
+    main { padding: 24px 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .grid-full { grid-column: 1 / -1; }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .card-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: rgba(55, 91, 210, 0.15);
+      color: var(--accent-light);
+    }
+
+    /* Search */
+    .search-group {
+      display: flex;
+      gap: 8px;
+    }
+    input, textarea, select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 14px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--accent-light);
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .btn-danger { background: var(--red); }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover { border-color: var(--text-muted); }
+
+    /* Market results */
+    .market-list { display: flex; flex-direction: column; gap: 10px; }
+    .market-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .market-item:hover { border-color: var(--accent-light); }
+    .market-question { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+    .market-prices {
+      display: flex;
+      gap: 16px;
+      font-size: 13px;
+    }
+    .price-yes { color: var(--green); }
+    .price-no { color: var(--red); }
+
+    /* Alert form */
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .form-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Alerts list */
+    .alert-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+    }
+    .alert-info { flex: 1; }
+    .alert-condition { font-size: 14px; font-weight: 500; }
+    .alert-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .alert-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    .alert-active { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+    .alert-triggered { background: rgba(210, 153, 34, 0.15); color: var(--yellow); }
+
+    /* Trend chart */
+    .trend-display {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .trend-stat {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .trend-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .trend-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+    .trend-up { color: var(--green); }
+    .trend-down { color: var(--red); }
+    .trend-neutral { color: var(--text-muted); }
+
+    /* Momentum badge */
+    .momentum {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .momentum-surging_up { background: rgba(63, 185, 80, 0.2); color: var(--green); }
+    .momentum-trending_up { background: rgba(63, 185, 80, 0.1); color: var(--green); }
+    .momentum-stable { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
+    .momentum-trending_down { background: rgba(248, 81, 73, 0.1); color: var(--red); }
+    .momentum-surging_down { background: rgba(248, 81, 73, 0.2); color: var(--red); }
+
+    /* Tech stack */
+    .tech-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .tech-chip {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* Payment info */
+    .payment-detail {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .payment-detail:last-child { border-bottom: none; }
+    .payment-label { color: var(--text-muted); }
+
+    /* Empty state */
+    .empty {
+      text-align: center;
+      padding: 30px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Loading */
+    .loading { text-align: center; padding: 20px; color: var(--text-muted); }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent-light);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+      .trend-display { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 30px 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+    }
+    footer a { color: var(--accent-light); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="logo">
+        <div class="logo-icon">&#x26D3;</div>
+        <div>
+          <h1>Polymarket Alerts</h1>
+          <span>Chainlink CRE + x402 Micropayments</span>
+        </div>
+      </div>
+      <div class="status-badge" id="statusBadge">
+        <div class="spinner"></div>
+        <span>Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="grid">
+
+        <!-- Search Markets -->
+        <div class="card grid-full">
+          <div class="card-header">
+            <span class="card-title">Search Markets</span>
+            <span class="card-badge">Polymarket CLOB</span>
+          </div>
+          <div class="search-group">
+            <input type="text" id="searchInput" placeholder="Search prediction markets (e.g. election, bitcoin, AI)" />
+            <button onclick="searchMarkets()">Search</button>
+          </div>
+          <div id="marketResults" class="market-list" style="margin-top: 14px;"></div>
+        </div>
+
+        <!-- Create Alert (NLP) -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Create Alert</span>
+            <span class="card-badge">NLP + x402</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Describe your alert in natural language</label>
+            <textarea id="nlpInput" placeholder="Alert me when Trump odds exceed 60%&#10;Notify if recession drops below 30%&#10;Trump > 70% AND Biden < 40%"></textarea>
+            <div class="form-hint">Supports percentages, cents, comparisons, multi-conditions (AND/OR)</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Webhook URL</label>
+            <input type="url" id="webhookInput" placeholder="https://your-webhook.com/alerts" />
+          </div>
+          <button onclick="createAlert()" style="width: 100%;">Create Alert ($0.01 USDC)</button>
+          <div id="alertResult" style="margin-top: 12px;"></div>
+        </div>
+
+        <!-- Payment Info -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Payment Info</span>
+            <span class="card-badge">Base L2</span>
+          </div>
+          <div id="paymentInfo">
+            <div class="payment-detail">
+              <span class="payment-label">Network</span>
+              <span>Base (Chain ID: 8453)</span>
+            </div>
+            <div class="payment-detail">
+              <span class="payment-label">Token</span>
+              <span>USDC</span>
+            </div>
+            <div class="payment-detail">
+              <span class="payment-label">Price per alert</span>
+              <span>$0.01</span>
+            </div>
+            <div class="payment-detail">
+              <span class="payment-label">5+ alerts</span>
+              <span>10% discount</span>
+            </div>
+            <div class="payment-detail">
+              <span class="payment-label">10+ alerts</span>
+              <span>20% discount</span>
+            </div>
+          </div>
+          <div style="margin-top: 16px;">
+            <span class="card-title" style="font-size: 13px;">Technology Stack</span>
+            <div class="tech-row">
+              <span class="tech-chip">Chainlink CRE</span>
+              <span class="tech-chip">x402 Protocol</span>
+              <span class="tech-chip">Hono</span>
+              <span class="tech-chip">Bun</span>
+              <span class="tech-chip">Base L2</span>
+              <span class="tech-chip">USDC</span>
+              <span class="tech-chip">Polymarket</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Alerts -->
+        <div class="card grid-full">
+          <div class="card-header">
+            <span class="card-title">Active Alerts</span>
+            <button class="btn-sm btn-outline" onclick="loadAlerts()">Refresh</button>
+          </div>
+          <div id="alertsList">
+            <div class="empty">No alerts yet. Create one above to get started.</div>
+          </div>
+        </div>
+
+        <!-- Trend Analysis -->
+        <div class="card grid-full" id="trendCard" style="display: none;">
+          <div class="card-header">
+            <span class="card-title" id="trendTitle">Trend Analysis</span>
+            <span id="trendMomentum"></span>
+          </div>
+          <div class="trend-display" id="trendStats"></div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      Chainlink Convergence Hackathon 2026 &mdash; Built by <a href="https://github.com/optimus-fulcria">Optimus Agent</a> (Fulcria Labs)<br>
+      <span style="margin-top: 4px; display: inline-block;">Powered by Chainlink CRE &bull; x402 Protocol &bull; Polymarket CLOB API</span>
+    </div>
+  </footer>
+
+  <script>
+    const API = window.location.origin;
+
+    // Health check
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API}/health`);
+        const data = await res.json();
+        const badge = document.getElementById('statusBadge');
+        badge.innerHTML = `<div class="status-dot"></div><span>${data.alertCount} alerts active</span>`;
+      } catch {
+        const badge = document.getElementById('statusBadge');
+        badge.innerHTML = `<span style="color: var(--red);">Offline</span>`;
+      }
+    }
+    checkHealth();
+    setInterval(checkHealth, 30000);
+
+    // Search markets
+    async function searchMarkets() {
+      const q = document.getElementById('searchInput').value.trim();
+      if (!q) return;
+      const container = document.getElementById('marketResults');
+      container.innerHTML = '<div class="loading"><div class="spinner"></div> Searching...</div>';
+
+      try {
+        const res = await fetch(`${API}/markets/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+
+        if (!data.markets || data.markets.length === 0) {
+          container.innerHTML = '<div class="empty">No markets found. Try a different search term.</div>';
+          return;
+        }
+
+        container.innerHTML = data.markets.map(m => `
+          <div class="market-item" onclick="selectMarket('${m.id}', this)">
+            <div class="market-question">${escapeHtml(m.question)}</div>
+            <div class="market-prices">
+              ${m.currentPrices.map(p =>
+                `<span class="${p.outcome === 'Yes' ? 'price-yes' : 'price-no'}">${p.outcome}: ${p.price}</span>`
+              ).join('')}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="empty" style="color: var(--red);">Search failed: ${err.message}</div>`;
+      }
+    }
+
+    // Enter key triggers search
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') searchMarkets();
+    });
+
+    // Select market and show trend
+    async function selectMarket(id, el) {
+      document.querySelectorAll('.market-item').forEach(e => e.style.borderColor = '');
+      el.style.borderColor = 'var(--accent-light)';
+      loadTrend(id, el.querySelector('.market-question').textContent);
+    }
+
+    // Load trend data
+    async function loadTrend(marketId, question) {
+      const card = document.getElementById('trendCard');
+      card.style.display = 'block';
+      document.getElementById('trendTitle').textContent = `Trend: ${question}`;
+      document.getElementById('trendStats').innerHTML = '<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>';
+
+      try {
+        const res = await fetch(`${API}/markets/${marketId}/trend?outcome=Yes`);
+        const data = await res.json();
+        const t = data.trend;
+
+        if (!t) {
+          document.getElementById('trendStats').innerHTML = '<div class="empty" style="grid-column:1/-1">No trend data available yet.</div>';
+          return;
+        }
+
+        document.getElementById('trendMomentum').innerHTML =
+          `<span class="momentum momentum-${t.momentum}">${formatMomentum(t.momentum)}</span>`;
+
+        document.getElementById('trendStats').innerHTML = `
+          <div class="trend-stat">
+            <div class="trend-value">${t.currentPrice.toFixed(1)}%</div>
+            <div class="trend-label">Current</div>
+          </div>
+          <div class="trend-stat">
+            <div class="trend-value ${trendClass(t.changePercent1h)}">${formatChange(t.changePercent1h)}</div>
+            <div class="trend-label">1h Change</div>
+          </div>
+          <div class="trend-stat">
+            <div class="trend-value ${trendClass(t.changePercent6h)}">${formatChange(t.changePercent6h)}</div>
+            <div class="trend-label">6h Change</div>
+          </div>
+          <div class="trend-stat">
+            <div class="trend-value">${t.volatility.toFixed(1)}</div>
+            <div class="trend-label">Volatility</div>
+          </div>
+        `;
+      } catch {
+        document.getElementById('trendStats').innerHTML = '<div class="empty" style="grid-column:1/-1">Could not load trend data.</div>';
+      }
+    }
+
+    // Create alert
+    async function createAlert() {
+      const nl = document.getElementById('nlpInput').value.trim();
+      const webhook = document.getElementById('webhookInput').value.trim();
+      const resultEl = document.getElementById('alertResult');
+
+      if (!nl) {
+        resultEl.innerHTML = '<div style="color: var(--red); font-size: 13px;">Please describe your alert condition.</div>';
+        return;
+      }
+
+      resultEl.innerHTML = '<div class="loading"><div class="spinner"></div> Processing...</div>';
+
+      try {
+        const res = await fetch(`${API}/alerts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ naturalLanguage: nl, notifyUrl: webhook || 'https://example.com/hook' }),
+        });
+        const data = await res.json();
+
+        if (res.status === 402) {
+          resultEl.innerHTML = `
+            <div style="background: var(--bg); border: 1px solid var(--yellow); border-radius: 8px; padding: 12px; font-size: 13px;">
+              <strong style="color: var(--yellow);">Payment Required</strong><br>
+              Send ${(parseInt(data.maxAmountRequired) / 1e6).toFixed(2)} USDC on Base to:<br>
+              <code style="font-size: 11px; word-break: break-all;">${data.payTo}</code>
+            </div>`;
+        } else if (data.success) {
+          const info = data.multiAlert
+            ? `${data.alertsCreated} alerts created!`
+            : `Alert created: ${data.alert.market || 'Custom alert'}`;
+          resultEl.innerHTML = `<div style="color: var(--green); font-size: 13px;">${escapeHtml(info)}</div>`;
+          loadAlerts();
+          checkHealth();
+        } else {
+          resultEl.innerHTML = `<div style="color: var(--red); font-size: 13px;">${escapeHtml(data.error || 'Failed')}</div>`;
+        }
+      } catch (err) {
+        resultEl.innerHTML = `<div style="color: var(--red); font-size: 13px;">Error: ${err.message}</div>`;
+      }
+    }
+
+    // Load alerts
+    async function loadAlerts() {
+      try {
+        const res = await fetch(`${API}/alerts`);
+        const data = await res.json();
+        const container = document.getElementById('alertsList');
+
+        if (!data.alerts || data.alerts.length === 0) {
+          container.innerHTML = '<div class="empty">No alerts yet. Create one above to get started.</div>';
+          return;
+        }
+
+        container.innerHTML = data.alerts.map((a, i) => `
+          <div class="alert-item">
+            <div class="alert-info">
+              <div class="alert-condition">${escapeHtml(a.outcome)} ${a.direction} ${a.threshold}%</div>
+              <div class="alert-meta">Market: ${escapeHtml(a.marketId?.substring(0, 16) || 'Unknown')}... &bull; Webhook: ${escapeHtml(a.notifyUrl?.substring(0, 30) || 'N/A')}</div>
+            </div>
+            <span class="alert-status ${a.triggered ? 'alert-triggered' : 'alert-active'}">${a.triggered ? 'Triggered' : 'Active'}</span>
+          </div>
+        `).join('');
+      } catch {
+        // silently fail
+      }
+    }
+    loadAlerts();
+
+    // Helpers
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+    function formatChange(val) {
+      if (val === null || val === undefined) return '--';
+      return (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
+    }
+    function trendClass(val) {
+      if (val === null || val === undefined) return 'trend-neutral';
+      return val > 0 ? 'trend-up' : val < 0 ? 'trend-down' : 'trend-neutral';
+    }
+    function formatMomentum(m) {
+      const labels = {
+        surging_up: 'Surging Up',
+        trending_up: 'Trending Up',
+        stable: 'Stable',
+        trending_down: 'Trending Down',
+        surging_down: 'Surging Down',
+      };
+      return labels[m] || m;
+    }
+  </script>
+</body>
+</html>

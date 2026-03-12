@@ -95,6 +95,7 @@ console.log(`
 
 console.log(`Starting server on port ${PORT}...`);
 console.log(`\nEndpoints:`);
+console.log(`  GET  /                    - Web dashboard`);
 console.log(`  GET  /health              - Health check`);
 console.log(`  GET  /markets/search      - Search prediction markets`);
 console.log(`  GET  /markets/:id         - Get market details`);

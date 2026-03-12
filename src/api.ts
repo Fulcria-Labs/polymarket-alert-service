@@ -34,6 +34,15 @@ const app = new Hono();
 // CORS for frontend access
 app.use('*', cors());
 
+// Serve dashboard
+app.get('/', async (c) => {
+  const file = Bun.file('./public/index.html');
+  if (await file.exists()) {
+    return new Response(file, { headers: { 'Content-Type': 'text/html' } });
+  }
+  return c.redirect('/health');
+});
+
 // Health check
 app.get('/health', (c) => {
   return c.json({

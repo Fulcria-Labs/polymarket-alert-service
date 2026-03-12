@@ -41,9 +41,19 @@ bun test
 # Run integration test
 bun run index.ts --test
 
-# Start API server
+# Start API server (dashboard at http://localhost:3000)
 bun run index.ts
 ```
+
+## Web Dashboard
+
+The service includes a built-in web dashboard at `/` that provides:
+- **Market Search** - Search Polymarket for active prediction markets
+- **NLP Alert Creation** - Create alerts using natural language with the x402 payment flow
+- **Trend Visualization** - Click any market to see real-time trend analysis and momentum
+- **Alert Management** - View and monitor all active alerts
+
+![Dashboard](public/screenshot.png)
 
 ## API Endpoints
 
@@ -169,6 +179,8 @@ curl -X POST http://localhost:3000/alerts \
 
 ```
 ├── index.ts                          # Entry point
+├── public/
+│   └── index.html                    # Web dashboard
 ├── src/
 │   ├── api.ts                        # Hono API routes
 │   ├── polymarket-alert-workflow.ts  # CRE workflow
