@@ -17,7 +17,7 @@
 
 import { serve } from 'bun';
 import app from './src/api';
-import workflow, { executeWorkflow, searchMarkets, parseAlertRequest, parseMultiConditionAlert, extractSearchKeywords } from './src/polymarket-alert-workflow';
+import workflow, { executeWorkflow, searchMarkets, parseAlertRequest, parseMultiConditionAlert, extractSearchKeywords, initPolymarketAlertWorkflow } from './src/polymarket-alert-workflow';
 
 const PORT = parseInt(process.env.PORT || '3000');
 

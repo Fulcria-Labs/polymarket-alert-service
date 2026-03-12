@@ -1224,12 +1224,13 @@ describe("Payment instructions - completeness checks", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("Workflow export - completeness", () => {
-  test("exports name, version, description, triggers, execute, helpers", async () => {
+  test("exports name, version, description, capabilities, execute, helpers", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
     expect(wf.name).toBeDefined();
     expect(wf.version).toBeDefined();
     expect(wf.description).toBeDefined();
-    expect(wf.triggers).toBeDefined();
+    expect(wf.capabilities).toBeDefined();
+    expect(wf.capabilities.triggers).toBeDefined();
     expect(wf.execute).toBeDefined();
     expect(wf.helpers).toBeDefined();
   });
@@ -1246,8 +1247,8 @@ describe("Workflow export - completeness", () => {
     expect(wf.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  test("triggers array is non-empty", async () => {
+  test("capabilities triggers array is non-empty", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
-    expect(wf.triggers.length).toBeGreaterThan(0);
+    expect(wf.capabilities.triggers.length).toBeGreaterThan(0);
   });
 });

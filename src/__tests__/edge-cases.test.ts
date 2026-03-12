@@ -663,9 +663,9 @@ describe("Workflow Default Export", () => {
   test("exports correct workflow metadata", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
     expect(wf.name).toBe("polymarket-alerts");
-    expect(wf.version).toBe("1.1.0");
+    expect(wf.version).toBe("2.0.0");
     expect(wf.description).toContain("prediction market");
-    expect(wf.triggers).toContain("cron:*/5 * * * *");
+    expect(wf.capabilities.triggers.some((t: string) => t.includes("cron-trigger"))).toBe(true);
     expect(typeof wf.execute).toBe("function");
   });
 

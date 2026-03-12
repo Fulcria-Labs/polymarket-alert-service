@@ -680,7 +680,7 @@ describe("CRE Integration Mocks", () => {
   });
 
   test("workflow exports version string", () => {
-    expect(workflow.version).toBe("1.1.0");
+    expect(workflow.version).toBe("2.0.0");
   });
 
   test("workflow exports description for CRE catalog", () => {
@@ -689,13 +689,14 @@ describe("CRE Integration Mocks", () => {
   });
 
   test("CRE trigger registration: workflow has cron trigger defined", () => {
-    expect(Array.isArray(workflow.triggers)).toBe(true);
-    expect(workflow.triggers.length).toBeGreaterThan(0);
-    expect(workflow.triggers[0]).toMatch(/^cron:/);
+    expect(workflow.capabilities).toBeDefined();
+    expect(Array.isArray(workflow.capabilities.triggers)).toBe(true);
+    expect(workflow.capabilities.triggers.length).toBeGreaterThan(0);
+    expect(workflow.capabilities.triggers[0]).toMatch(/cron-trigger/);
   });
 
   test("CRE trigger cron schedule: checks every 5 minutes", () => {
-    expect(workflow.triggers[0]).toBe("cron:*/5 * * * *");
+    expect(workflow.capabilities.triggers[0]).toContain("*/5 * * * *");
   });
 
   test("workflow state serialization: executeWorkflow accepts and returns state", async () => {

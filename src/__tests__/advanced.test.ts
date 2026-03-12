@@ -1037,15 +1037,15 @@ describe("Workflow metadata", () => {
     expect(wf.name).toBe("polymarket-alerts");
   });
 
-  test("workflow triggers include cron schedule", async () => {
+  test("workflow capabilities include cron trigger", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
-    expect(wf.triggers.length).toBeGreaterThan(0);
-    expect(wf.triggers[0]).toMatch(/cron:/);
+    expect(wf.capabilities.triggers.length).toBeGreaterThan(0);
+    expect(wf.capabilities.triggers[0]).toMatch(/cron-trigger/);
   });
 
   test("workflow cron runs every 5 minutes", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
-    expect(wf.triggers).toContain("cron:*/5 * * * *");
+    expect(wf.capabilities.triggers[0]).toContain("*/5 * * * *");
   });
 
   test("workflow description mentions prediction", async () => {

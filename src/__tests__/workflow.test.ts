@@ -777,7 +777,7 @@ describe("workflow default export", () => {
   test("exports name and version", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
     expect(wf.name).toBe("polymarket-alerts");
-    expect(wf.version).toBe("1.1.0");
+    expect(wf.version).toBe("2.0.0");
   });
 
   test("exports execute function", async () => {
@@ -795,10 +795,11 @@ describe("workflow default export", () => {
     expect(typeof wf.helpers.fetchMarketData).toBe("function");
   });
 
-  test("has triggers array", async () => {
+  test("has capabilities with triggers array", async () => {
     const wf = (await import("../polymarket-alert-workflow")).default;
-    expect(Array.isArray(wf.triggers)).toBe(true);
-    expect(wf.triggers.length).toBeGreaterThan(0);
+    expect(wf.capabilities).toBeDefined();
+    expect(Array.isArray(wf.capabilities.triggers)).toBe(true);
+    expect(wf.capabilities.triggers.length).toBeGreaterThan(0);
   });
 });
 
