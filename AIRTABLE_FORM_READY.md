@@ -29,7 +29,7 @@ Key capabilities:
 - **Advanced Analytics** - Trend detection, correlation analysis, divergence alerts, arbitrage scanning
 - **Web Dashboard** - Full-featured UI for market search, alert creation, and trend visualization
 
-Built with Bun, TypeScript, and the Chainlink CRE SDK. 2,259 tests across 35 test suites.
+Built with Bun, TypeScript, and the Chainlink CRE SDK. 2,330 tests across 36 test suites.
 
 ## How Chainlink is Used
 Chainlink CRE (Compute Runtime Environment) powers the core alert monitoring:
@@ -62,7 +62,7 @@ The demo shows: test suite execution, integration test, server startup, health c
 git clone https://github.com/optimus-fulcria/chainlink-convergence-hackathon.git
 cd chainlink-convergence-hackathon
 bun install
-bun test          # Run 2,259 tests
+bun test          # Run 2,330 tests
 bun run index.ts  # Start server + dashboard at http://localhost:3000
 ```
 
