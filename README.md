@@ -57,7 +57,7 @@ The service includes a built-in web dashboard at `/` that provides:
 - **Trend Visualization** - Click any market to see real-time trend analysis and momentum
 - **Alert Management** - View and monitor all active alerts
 
-![Dashboard](public/screenshot.png)
+*The web dashboard provides a search interface for Polymarket prediction markets, an NLP-powered alert creation form with x402 payment integration, real-time trend visualization with momentum indicators, and an alert management panel showing all active conditions and their status.*
 
 ## API Endpoints
 
