@@ -196,8 +196,8 @@ export function recordPortfolioSnapshot(
   for (const m of portfolio.markets) {
     const history = priceHistory[m.marketId] || [];
     if (history.length > 0) {
-      const latest = history[history.length - 1];
-      const price = latest.prices[m.outcome] || 0;
+      const latest = history[history.length - 1]!;
+      const price = latest.prices[m.outcome] ?? 0;
       marketPrices[m.marketId] = price;
       weightedAvg += m.weight * price;
     }
@@ -234,8 +234,8 @@ export function pearsonCorrelation(xValues: number[], yValues: number[]): number
   let denomY = 0;
 
   for (let i = 0; i < n; i++) {
-    const dx = x[i] - meanX;
-    const dy = y[i] - meanY;
+    const dx = x[i]! - meanX;
+    const dy = y[i]! - meanY;
     numerator += dx * dy;
     denomX += dx * dx;
     denomY += dy * dy;
@@ -277,22 +277,22 @@ export function buildCorrelationMatrix(
     const snapshots = priceHistory[id] || [];
     series[id] = snapshots
       .filter(s => s.prices[outcome] !== undefined)
-      .map(s => s.prices[outcome]);
+      .map(s => s.prices[outcome] ?? 0);
   }
 
   // Build NxN matrix
   for (let i = 0; i < n; i++) {
-    matrix[i][i] = 1.0; // Self-correlation
+    matrix[i]![i] = 1.0; // Self-correlation
     for (let j = i + 1; j < n; j++) {
-      const xSeries = series[marketIds[i]] || [];
-      const ySeries = series[marketIds[j]] || [];
+      const xSeries = series[marketIds[i]!] || [];
+      const ySeries = series[marketIds[j]!] || [];
       const r = pearsonCorrelation(xSeries, ySeries);
-      matrix[i][j] = r;
-      matrix[j][i] = r;
+      matrix[i]![j] = r;
+      matrix[j]![i] = r;
 
       pairs.push({
-        marketA: marketIds[i],
-        marketB: marketIds[j],
+        marketA: marketIds[i]!,
+        marketB: marketIds[j]!,
         correlation: r,
         dataPoints: Math.min(xSeries.length, ySeries.length),
         significance: classifyCorrelation(r),
@@ -333,8 +333,8 @@ export function detectDivergences(
 
     if (historyA.length === 0 || historyB.length === 0) continue;
 
-    const currentA = historyA[historyA.length - 1].prices[outcome] ?? 0;
-    const currentB = historyB[historyB.length - 1].prices[outcome] ?? 0;
+    const currentA = historyA[historyA.length - 1]!.prices[outcome] ?? 0;
+    const currentB = historyB[historyB.length - 1]!.prices[outcome] ?? 0;
 
     // For positively correlated markets, prices should move together
     // For negatively correlated, they should move apart
@@ -345,7 +345,7 @@ export function detectDivergences(
     const n = Math.min(seriesA.length, seriesB.length);
     let totalDiff = 0;
     for (let i = 0; i < n; i++) {
-      totalDiff += seriesA[seriesA.length - n + i] - seriesB[seriesB.length - n + i];
+      totalDiff += (seriesA[seriesA.length - n + i] ?? 0) - (seriesB[seriesB.length - n + i] ?? 0);
     }
     const expectedDiff = totalDiff / n;
     const actualDiff = currentA - currentB;
@@ -443,7 +443,7 @@ export function detectCrossMarketArbitrage(
       const n = Math.min(seriesA.length, seriesB.length);
       let totalCombined = 0;
       for (let i = 0; i < n; i++) {
-        totalCombined += seriesA[seriesA.length - n + i] + seriesB[seriesB.length - n + i];
+        totalCombined += (seriesA[seriesA.length - n + i] ?? 0) + (seriesB[seriesB.length - n + i] ?? 0);
       }
       expectedCombined = totalCombined / n;
       break;

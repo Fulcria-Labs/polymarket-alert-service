@@ -101,7 +101,7 @@ export async function fetchMarketData(marketId: string): Promise<PolymarketMarke
       console.error(`Failed to fetch market ${marketId}: ${response.status}`);
       return null;
     }
-    return await response.json();
+    return await response.json() as PolymarketMarket;
   } catch (error) {
     console.error(`Error fetching market ${marketId}:`, error);
     return null;
@@ -315,7 +315,7 @@ export function analyzeTrend(
     };
   }
 
-  const currentPrice = relevantSnapshots[relevantSnapshots.length - 1].prices[outcome];
+  const currentPrice = relevantSnapshots[relevantSnapshots.length - 1]!.prices[outcome] ?? 0;
 
   // Calculate changes over time windows
   const findPriceAt = (msAgo: number): number | null => {
@@ -332,7 +332,7 @@ export function analyzeTrend(
     }
     // Only use if within 20% of the target window
     if (closest && closestDiff < msAgo * 0.2) {
-      return closest.prices[outcome];
+      return closest.prices[outcome] ?? null;
     }
     return null;
   };
@@ -346,9 +346,9 @@ export function analyzeTrend(
   const changePercent24h = price24hAgo !== null ? currentPrice - price24hAgo : null;
 
   // Calculate volatility (standard deviation of recent prices)
-  const recentPrices = relevantSnapshots.slice(-12).map(s => s.prices[outcome]);
-  const mean = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
-  const variance = recentPrices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / recentPrices.length;
+  const recentPrices = relevantSnapshots.slice(-12).map(s => s.prices[outcome] ?? 0);
+  const mean = recentPrices.reduce((a, b) => (a ?? 0) + (b ?? 0), 0) / recentPrices.length;
+  const variance = recentPrices.reduce((sum, p) => (sum ?? 0) + Math.pow((p ?? 0) - mean, 2), 0) / recentPrices.length;
   const volatility = Math.sqrt(variance);
 
   // Determine momentum based on short-term change
@@ -362,7 +362,7 @@ export function analyzeTrend(
 
   return {
     outcome,
-    currentPrice,
+    currentPrice: currentPrice ?? 0,
     changePercent1h,
     changePercent6h,
     changePercent24h,
@@ -504,16 +504,16 @@ interface ParsePattern {
 export function levenshteinDistance(a: string, b: string): number {
   const m = a.length, n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 0; i <= m; i++) dp[i]![0] = i;
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      dp[i]![j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1]![j - 1]!
+        : 1 + Math.min(dp[i - 1]![j]!, dp[i]![j - 1]!, dp[i - 1]![j - 1]!);
     }
   }
-  return dp[m][n];
+  return dp[m]![n]!;
 }
 
 /**
@@ -563,11 +563,11 @@ export function fuzzyDetectDirection(text: string): 'above' | 'below' | null {
   // Also extract first words from multi-word keywords (e.g., "drops" from "drops to")
   const aboveSingle = [...new Set([
     ...ABOVE_KEYWORDS.filter(k => !k.includes(' ')),
-    ...ABOVE_KEYWORDS.filter(k => k.includes(' ')).map(k => k.split(' ')[0]),
+    ...ABOVE_KEYWORDS.filter(k => k.includes(' ')).map(k => k.split(' ')[0]!),
   ])];
   const belowSingle = [...new Set([
     ...BELOW_KEYWORDS.filter(k => !k.includes(' ')),
-    ...BELOW_KEYWORDS.filter(k => k.includes(' ')).map(k => k.split(' ')[0]),
+    ...BELOW_KEYWORDS.filter(k => k.includes(' ')).map(k => k.split(' ')[0]!),
   ])];
 
   let bestDir: 'above' | 'below' | null = null;
@@ -651,7 +651,7 @@ function extractPercentage(text: string): number | null {
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
-      let value = parseFloat(match[1]);
+      let value = parseFloat(match[1]!);
       // Handle "cents" format (70 cents = 70%)
       if (pattern.source.includes('cents')) {
         return value;
@@ -689,36 +689,36 @@ export function parseAlertRequest(request: string, notifyUrl: string): AlertConf
     {
       regex: /(?:when|if|once)\s+(.+?)\s+(?:odds?|probability|chance|likelihood)\s+(?:to\s+)?(\w+(?:\s+\w+)*)\s+(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/i,
       extractor: (m) => ({
-        threshold: parseFloat(m[3]),
-        direction: detectDirection(m[2]),
-        outcome: detectOutcome(m[1]),
+        threshold: parseFloat(m[3]!),
+        direction: detectDirection(m[2]!) ?? undefined,
+        outcome: detectOutcome(m[1]!),
       })
     },
     // Pattern 2: "when X exceeds/drops below Y%"
     {
       regex: /(?:when|if|once)\s+(.+?)\s+(exceeds?|goes?\s+above|rises?\s+to|drops?\s+(?:to|below)|falls?\s+(?:to|below)|goes?\s+below)\s+(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/i,
       extractor: (m) => ({
-        threshold: parseFloat(m[3]),
-        direction: detectDirection(m[2]),
-        outcome: detectOutcome(m[1]),
+        threshold: parseFloat(m[3]!),
+        direction: detectDirection(m[2]!) ?? undefined,
+        outcome: detectOutcome(m[1]!),
       })
     },
     // Pattern 3: "X > Y%" or "X < Y%"
     {
       regex: /(.+?)\s*([<>])\s*(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/,
       extractor: (m) => ({
-        threshold: parseFloat(m[3]),
+        threshold: parseFloat(m[3]!),
         direction: m[2] === '>' ? 'above' : 'below',
-        outcome: detectOutcome(m[1]),
+        outcome: detectOutcome(m[1]!),
       })
     },
     // Pattern 4: Simple "X hits Y%"
     {
       regex: /(.+?)\s+(hits?|reaches?|at|to)\s+(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/i,
       extractor: (m) => ({
-        threshold: parseFloat(m[3]),
+        threshold: parseFloat(m[3]!),
         direction: 'above' as const,
-        outcome: detectOutcome(m[1]),
+        outcome: detectOutcome(m[1]!),
       })
     },
   ];
@@ -805,7 +805,7 @@ export function extractSearchKeywords(request: string): string[] {
   for (const pattern of topicPatterns) {
     const match = request.match(pattern);
     if (match) {
-      keywords.push(match[1].trim());
+      keywords.push(match[1]!.trim());
     }
   }
 
@@ -833,7 +833,7 @@ export async function searchMarkets(query: string): Promise<PolymarketMarket[]> 
       return [];
     }
 
-    const markets: any[] = await response.json();
+    const markets = await response.json() as any[];
 
     // Filter by query (simple text match)
     const queryLower = query.toLowerCase();

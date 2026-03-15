@@ -58,7 +58,7 @@ if (process.argv.includes('--test')) {
   const markets = await searchMarkets('election');
   console.log(`   Found ${markets.length} markets`);
   if (markets.length > 0) {
-    console.log(`   Example: "${markets[0].question}"`);
+    console.log(`   Example: "${markets[0]!.question}"`);
   }
 
   // Test workflow execution with sample config
@@ -73,6 +73,7 @@ if (process.argv.includes('--test')) {
     }],
     lastChecked: {},
     triggeredAlerts: [],
+    priceHistory: {},
   };
 
   const result = await executeWorkflow(testState);

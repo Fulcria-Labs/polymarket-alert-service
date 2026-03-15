@@ -137,7 +137,7 @@ app.get('/markets/:id/trend', async (c) => {
     const market = await fetchMarketData(marketId);
     if (market) {
       recordPriceSnapshot(state.priceHistory, marketId, market);
-      const trend = analyzeTrend(state.priceHistory[marketId], outcome);
+      const trend = analyzeTrend(state.priceHistory[marketId] ?? [], outcome);
       return c.json({
         marketId,
         trend,
