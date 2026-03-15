@@ -32,6 +32,10 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 - **Correlation Analysis**: Pearson correlation matrix between markets
 - **Divergence Detection**: Alerts when correlated markets diverge
 - **Arbitrage Detection**: Single-market & cross-market mispricing scanner
+- **Advanced Market Correlation**: Rolling correlation, regime detection, clustering
+- **Conditional Probability**: Bayesian P(B|A) estimates with confidence intervals
+- **Market Maker Detection**: Accumulation, distribution, spread, mean-reversion patterns
+- **Cross-Market Arbitrage**: Mutually exclusive, subset, and complementary opportunity scanning
 - **Webhook Notifications**: Get notified when your conditions are met
 - **Market Search**: Find prediction markets by keyword
 
@@ -41,7 +45,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (2259 tests across 35 suites)
+# Run unit tests (2330 tests across 36 suites)
 bun test
 
 # Run integration test
@@ -279,6 +283,7 @@ The service implements production-grade security controls:
 │   ├── api.ts                        # Hono API routes
 │   ├── polymarket-alert-workflow.ts  # CRE workflow
 │   ├── portfolio.ts                  # Portfolio & arbitrage
+│   ├── market-correlation.ts         # Advanced correlation & analytics
 │   └── x402-handler.ts               # Payment handling
 └── package.json
 ```
