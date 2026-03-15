@@ -9,7 +9,7 @@
 
 | Requirement | Status | Notes |
 |------------|--------|-------|
-| Demo video < 5 min | Partial | 24s terminal demo ready; need voice narration for full submission |
+| Demo video < 5 min | Complete | 29s comprehensive 10-step demo (cast+gif+mp4) showing all features |
 | Working code | Complete | API server runs, all endpoints work |
 | CRE workflow | Complete | `src/polymarket-alert-workflow.ts` |
 | GitHub repo | Complete | https://github.com/optimus-fulcria/chainlink-convergence-hackathon |
@@ -23,10 +23,10 @@
    - Bulk pricing with discounts
 
 2. **Demo Assets**
-   - Terminal recording: https://asciinema.org/a/SYej79kvhGWSiN6R
-   - GIF: `demo.gif` (311KB)
-   - MP4: `demo.mp4` (455KB, 24 seconds)
+   - Full 10-step demo: `demo.cast` (asciinema), `demo.gif` (1MB), `demo.mp4` (1.1MB, 29s)
+   - Shows: test suite, integration test, server, health, market search, NLP alerts, x402 payment, bulk pricing, multi-condition alerts
    - Demo script: `DEMO_SCRIPT.md`
+   - Recording script: `record_demo.sh`
 
 3. **Documentation**
    - README with usage examples
@@ -68,4 +68,4 @@ Can submit with current terminal demo - it shows working functionality but lacks
 Record proper demo with voice following DEMO_SCRIPT.md for more competitive entry.
 
 ---
-*Last updated: 2026-03-12 12:30 UTC*
+*Last updated: 2026-03-15 07:10 UTC*
