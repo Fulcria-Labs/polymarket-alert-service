@@ -311,6 +311,106 @@
       .trend-display { grid-template-columns: repeat(2, 1fr); }
     }
 
+    /* Price chart */
+    .chart-container {
+      margin-top: 16px;
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+    }
+    .chart-container svg {
+      width: 100%;
+      height: 160px;
+    }
+    .chart-label {
+      font-size: 11px;
+      fill: var(--text-muted);
+    }
+    .chart-grid { stroke: var(--border); stroke-width: 0.5; }
+    .chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .chart-area { opacity: 0.1; }
+    .chart-dot { r: 3; }
+    .chart-tooltip {
+      position: absolute;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      pointer-events: none;
+      display: none;
+      z-index: 10;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    /* Portfolio */
+    .portfolio-form {
+      display: grid;
+      grid-template-columns: 1fr 2fr auto;
+      gap: 8px;
+      align-items: end;
+    }
+    .portfolio-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .portfolio-name { font-weight: 600; font-size: 14px; }
+    .portfolio-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .portfolio-perf {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .perf-value {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    /* Tabs */
+    .tab-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--accent-light);
+      border-bottom-color: var(--accent-light);
+    }
+
     /* Footer */
     footer {
       text-align: center;
@@ -436,6 +536,46 @@
             <span id="trendMomentum"></span>
           </div>
           <div class="trend-display" id="trendStats"></div>
+          <div class="chart-container" id="chartContainer" style="display: none;">
+            <svg id="priceChart" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
+            <div class="chart-tooltip" id="chartTooltip"></div>
+            <div class="chart-legend" id="chartLegend"></div>
+          </div>
+        </div>
+
+        <!-- Portfolio Management -->
+        <div class="card grid-full">
+          <div class="card-header">
+            <span class="card-title">Portfolios</span>
+            <span class="card-badge">Correlation + Arbitrage</span>
+          </div>
+          <div class="tab-row">
+            <button class="tab-btn active" onclick="showTab('portfolioList', this)">My Portfolios</button>
+            <button class="tab-btn" onclick="showTab('arbitragePanel', this)">Arbitrage Scanner</button>
+          </div>
+          <div id="portfolioList">
+            <div class="form-group">
+              <div class="portfolio-form">
+                <input type="text" id="portfolioId" placeholder="portfolio-id" />
+                <input type="text" id="portfolioName" placeholder="Portfolio name (e.g. Election Watch)" />
+                <button class="btn-sm" onclick="createPortfolioFromSelected()">Create</button>
+              </div>
+              <div class="form-hint">Select markets from search results above, then create a portfolio to track them together.</div>
+            </div>
+            <div id="selectedMarkets" style="margin-bottom: 12px;"></div>
+            <div id="portfolioItems">
+              <div class="empty">No portfolios yet. Search for markets and create one.</div>
+            </div>
+          </div>
+          <div id="arbitragePanel" style="display: none;">
+            <div class="form-group">
+              <div class="form-hint" style="margin-bottom: 8px;">Scan selected markets for mispriced outcomes (Yes + No != ~100%)</div>
+              <button onclick="runArbitrageScan()">Scan for Arbitrage</button>
+            </div>
+            <div id="arbitrageResults">
+              <div class="empty">Select markets from search, then scan for arbitrage opportunities.</div>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -646,6 +786,323 @@
         surging_down: 'Surging Down',
       };
       return labels[m] || m;
+    }
+
+    // ---- Price Chart ----
+    let currentChartMarketId = null;
+
+    async function renderPriceChart(marketId) {
+      currentChartMarketId = marketId;
+      const container = document.getElementById('chartContainer');
+      const svg = document.getElementById('priceChart');
+      const legend = document.getElementById('chartLegend');
+
+      try {
+        const res = await fetch(`${API}/markets/${marketId}/history?hours=24`);
+        const data = await res.json();
+
+        if (!data.history || data.history.length < 2) {
+          container.style.display = 'none';
+          return;
+        }
+
+        container.style.display = 'block';
+        const history = data.history;
+
+        // Collect all outcomes
+        const outcomes = new Set();
+        history.forEach(h => Object.keys(h.prices).forEach(k => outcomes.add(k)));
+        const outcomeList = Array.from(outcomes);
+        const colors = { Yes: '#3fb950', No: '#f85149' };
+
+        // Chart dimensions
+        const W = 600, H = 160, pad = { top: 10, right: 10, bottom: 25, left: 40 };
+        const cw = W - pad.left - pad.right;
+        const ch = H - pad.top - pad.bottom;
+
+        // Scale data
+        const times = history.map(h => new Date(h.timestamp).getTime());
+        const tMin = Math.min(...times), tMax = Math.max(...times);
+        let pMin = 100, pMax = 0;
+        history.forEach(h => {
+          Object.values(h.prices).forEach(p => {
+            if (p < pMin) pMin = p;
+            if (p > pMax) pMax = p;
+          });
+        });
+        pMin = Math.max(0, pMin - 5);
+        pMax = Math.min(100, pMax + 5);
+
+        const xScale = t => pad.left + ((t - tMin) / (tMax - tMin || 1)) * cw;
+        const yScale = p => pad.top + ch - ((p - pMin) / (pMax - pMin || 1)) * ch;
+
+        let svgContent = '';
+
+        // Grid lines
+        const gridSteps = 4;
+        for (let i = 0; i <= gridSteps; i++) {
+          const y = pad.top + (ch / gridSteps) * i;
+          const val = pMax - ((pMax - pMin) / gridSteps) * i;
+          svgContent += `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" class="chart-grid"/>`;
+          svgContent += `<text x="${pad.left - 6}" y="${y + 3}" text-anchor="end" class="chart-label">${val.toFixed(0)}%</text>`;
+        }
+
+        // Time labels
+        const timeSteps = Math.min(5, history.length);
+        for (let i = 0; i < timeSteps; i++) {
+          const idx = Math.floor((history.length - 1) * i / (timeSteps - 1));
+          const t = new Date(history[idx].timestamp);
+          const x = xScale(t.getTime());
+          const label = t.getHours().toString().padStart(2, '0') + ':' + t.getMinutes().toString().padStart(2, '0');
+          svgContent += `<text x="${x}" y="${H - 4}" text-anchor="middle" class="chart-label">${label}</text>`;
+        }
+
+        // Lines for each outcome
+        outcomeList.forEach(outcome => {
+          const color = colors[outcome] || '#58a6ff';
+          const points = history
+            .filter(h => h.prices[outcome] !== undefined)
+            .map(h => ({ x: xScale(new Date(h.timestamp).getTime()), y: yScale(h.prices[outcome]) }));
+
+          if (points.length < 2) return;
+
+          const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+          svgContent += `<path d="${pathD}" class="chart-line" stroke="${color}"/>`;
+
+          // Area fill
+          const areaD = pathD + ` L${points[points.length - 1].x.toFixed(1)},${pad.top + ch} L${points[0].x.toFixed(1)},${pad.top + ch} Z`;
+          svgContent += `<path d="${areaD}" class="chart-area" fill="${color}"/>`;
+
+          // Dots at start and end
+          svgContent += `<circle cx="${points[0].x}" cy="${points[0].y}" class="chart-dot" fill="${color}"/>`;
+          svgContent += `<circle cx="${points[points.length - 1].x}" cy="${points[points.length - 1].y}" class="chart-dot" fill="${color}"/>`;
+        });
+
+        svg.innerHTML = svgContent;
+
+        // Legend
+        legend.innerHTML = outcomeList.map(o => {
+          const color = colors[o] || '#58a6ff';
+          return `<span><span class="legend-dot" style="background:${color}"></span>${o}</span>`;
+        }).join('');
+
+      } catch {
+        container.style.display = 'none';
+      }
+    }
+
+    // ---- Portfolio Management ----
+    let selectedMarketsList = [];
+
+    // Override selectMarket to also track for portfolio
+    const _origSelectMarket = selectMarket;
+    selectMarket = async function(id, el) {
+      document.querySelectorAll('.market-item').forEach(e => e.style.borderColor = '');
+      el.style.borderColor = 'var(--accent-light)';
+      const question = el.querySelector('.market-question').textContent;
+      loadTrend(id, question);
+      renderPriceChart(id);
+
+      // Toggle market selection for portfolio
+      const idx = selectedMarketsList.findIndex(m => m.id === id);
+      if (idx >= 0) {
+        selectedMarketsList.splice(idx, 1);
+        el.style.borderColor = '';
+      } else {
+        selectedMarketsList.push({ id, question, outcome: 'Yes', weight: 1 });
+      }
+      renderSelectedMarkets();
+    };
+
+    function renderSelectedMarkets() {
+      const el = document.getElementById('selectedMarkets');
+      if (selectedMarketsList.length === 0) {
+        el.innerHTML = '';
+        return;
+      }
+      el.innerHTML = '<div class="form-label" style="margin-bottom:6px;">Selected markets (' + selectedMarketsList.length + ')</div>' +
+        selectedMarketsList.map((m, i) => `
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:13px;">
+            <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(m.question)}</span>
+            <button class="btn-sm btn-danger" onclick="removeSelectedMarket(${i})" style="padding:2px 8px;">×</button>
+          </div>
+        `).join('');
+    }
+
+    function removeSelectedMarket(idx) {
+      selectedMarketsList.splice(idx, 1);
+      renderSelectedMarkets();
+    }
+
+    async function createPortfolioFromSelected() {
+      const id = document.getElementById('portfolioId').value.trim();
+      const name = document.getElementById('portfolioName').value.trim();
+
+      if (!id || !name) {
+        return;
+      }
+      if (selectedMarketsList.length === 0) {
+        return;
+      }
+
+      const weight = 1 / selectedMarketsList.length;
+      const markets = selectedMarketsList.map(m => ({
+        marketId: m.id,
+        label: m.question.substring(0, 50),
+        outcome: 'Yes',
+        weight: parseFloat(weight.toFixed(2)),
+      }));
+
+      try {
+        const res = await fetch(`${API}/portfolios`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name, markets }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          selectedMarketsList = [];
+          renderSelectedMarkets();
+          document.getElementById('portfolioId').value = '';
+          document.getElementById('portfolioName').value = '';
+          loadPortfolios();
+        }
+      } catch {}
+    }
+
+    async function loadPortfolios() {
+      try {
+        const res = await fetch(`${API}/portfolios`);
+        const data = await res.json();
+        const container = document.getElementById('portfolioItems');
+
+        if (!data.portfolios || data.portfolios.length === 0) {
+          container.innerHTML = '<div class="empty">No portfolios yet. Search for markets and create one.</div>';
+          return;
+        }
+
+        container.innerHTML = data.portfolios.map(p => `
+          <div class="portfolio-item">
+            <div>
+              <div class="portfolio-name">${escapeHtml(p.name)}</div>
+              <div class="portfolio-meta">${p.marketCount} markets · Created ${new Date(p.createdAt).toLocaleDateString()}</div>
+            </div>
+            <div class="portfolio-perf">
+              <button class="btn-sm btn-outline" onclick="viewPortfolio('${escapeHtml(p.id)}')">View</button>
+              <button class="btn-sm btn-danger" onclick="deletePortfolio('${escapeHtml(p.id)}')">Delete</button>
+            </div>
+          </div>
+        `).join('');
+      } catch {}
+    }
+    loadPortfolios();
+
+    async function viewPortfolio(id) {
+      try {
+        const res = await fetch(`${API}/portfolios/${id}`);
+        const data = await res.json();
+        if (!data.portfolio) return;
+
+        const p = data.portfolio;
+        const perf = data.performance;
+        const container = document.getElementById('portfolioItems');
+
+        let perfHtml = '';
+        if (perf && perf.markets) {
+          perfHtml = perf.markets.map(m => `
+            <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:13px;">
+              <span>${escapeHtml(m.label || m.marketId.substring(0, 16))}</span>
+              <span class="${m.currentPrice > 50 ? 'trend-up' : 'trend-down'}">${m.currentPrice ? m.currentPrice.toFixed(1) + '%' : 'N/A'}</span>
+            </div>
+          `).join('');
+        }
+
+        container.innerHTML = `
+          <div style="margin-bottom:12px;">
+            <button class="btn-sm btn-outline" onclick="loadPortfolios()">← Back</button>
+          </div>
+          <div class="portfolio-item" style="flex-direction:column; align-items:stretch;">
+            <div class="portfolio-name" style="margin-bottom:8px;">${escapeHtml(p.name)}</div>
+            ${perfHtml || '<div class="empty">No performance data yet — CRE needs to collect price history.</div>'}
+          </div>
+        `;
+      } catch {}
+    }
+
+    async function deletePortfolio(id) {
+      try {
+        await fetch(`${API}/portfolios/${id}`, { method: 'DELETE' });
+        loadPortfolios();
+      } catch {}
+    }
+
+    // ---- Arbitrage Scanner ----
+    async function runArbitrageScan() {
+      const results = document.getElementById('arbitrageResults');
+      if (selectedMarketsList.length === 0) {
+        results.innerHTML = '<div class="empty">No markets selected. Search and click markets above first.</div>';
+        return;
+      }
+
+      results.innerHTML = '<div class="loading"><div class="spinner"></div> Scanning...</div>';
+
+      // Build market data for scan
+      const marketsData = selectedMarketsList.map(m => ({
+        id: m.id,
+        question: m.question,
+        outcomes: [
+          { name: 'Yes', price: 50 },
+          { name: 'No', price: 50 },
+        ],
+      }));
+
+      // Try to get real prices
+      for (const md of marketsData) {
+        try {
+          const res = await fetch(`${API}/markets/${md.id}`);
+          const data = await res.json();
+          if (data.outcomes) {
+            md.outcomes = data.outcomes.map(o => ({
+              name: o.name,
+              price: parseFloat(o.price),
+            }));
+          }
+        } catch {}
+      }
+
+      try {
+        const res = await fetch(`${API}/arbitrage/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markets: marketsData }),
+        });
+        const data = await res.json();
+
+        if (!data.opportunities || data.opportunities.length === 0) {
+          results.innerHTML = '<div class="empty" style="color: var(--green);">No arbitrage found — markets are fairly priced.</div>';
+          return;
+        }
+
+        results.innerHTML = data.opportunities.map(opp => `
+          <div class="alert-item">
+            <div class="alert-info">
+              <div class="alert-condition">${escapeHtml(opp.type || 'Mispricing')}</div>
+              <div class="alert-meta">${escapeHtml(opp.description || JSON.stringify(opp))}</div>
+            </div>
+            <span class="alert-status alert-triggered">${opp.spread ? opp.spread.toFixed(1) + '%' : 'Found'}</span>
+          </div>
+        `).join('');
+      } catch (err) {
+        results.innerHTML = `<div class="empty" style="color: var(--red);">Scan failed: ${err.message}</div>`;
+      }
+    }
+
+    // ---- Tab Switching ----
+    function showTab(tabId, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('portfolioList').style.display = tabId === 'portfolioList' ? '' : 'none';
+      document.getElementById('arbitragePanel').style.display = tabId === 'arbitragePanel' ? '' : 'none';
     }
   </script>
 </body>
