@@ -162,21 +162,102 @@ curl -X POST http://localhost:3000/alerts \
 | 5+ | 10% off |
 | 10+ | 20% off |
 
+## Why Polymarket Alert Service?
+
+Existing prediction market monitoring tools offer only basic threshold alerts on individual markets. This project solves three problems traders face:
+
+1. **No natural language**: Traders must manually configure market IDs, outcome names, and thresholds. Our NLP parser understands "Alert when Trump > 60% AND recession < 30%" — including fuzzy keyword matching, multi-condition logic, and cent/percentage normalization.
+
+2. **No portfolio intelligence**: No existing tool correlates price movements across markets. Our Pearson correlation matrix detects when historically-linked markets diverge (e.g., presidential and senate election odds), and our arbitrage scanner finds mispriced outcome pairs where Yes+No don't sum to ~100%.
+
+3. **No decentralized execution**: Centralized alert services are single points of failure. Chainlink CRE enables trustless, scheduled alert monitoring on a decentralized oracle network — alerts execute even if our server goes down.
+
+**x402 micropayments** ($0.01 USDC on Base) enable frictionless pay-per-alert pricing instead of monthly subscriptions, lowering the barrier for casual traders.
+
+## Chainlink CRE Integration
+
+This project uses Chainlink's **Compute Runtime Environment (CRE)** as its core execution engine, not just a peripheral integration.
+
+### How CRE Powers Alert Monitoring
+
+The workflow in `src/polymarket-alert-workflow.ts` implements the CRE handler/trigger pattern:
+
+```typescript
+// CronCapability fires every 5 minutes via DON scheduling
+const cronTrigger = new CronCapability({
+  schedule: "*/5 * * * *",
+  handler: async (runtime) => {
+    // Fetch all active alerts from runtime state
+    const alerts = await runtime.getState("alerts");
+    // Check each alert against live Polymarket data
+    for (const alert of alerts) {
+      const market = await fetchMarketData(alert.marketId);
+      if (conditionMet(alert, market)) {
+        await runtime.emit("alert_triggered", { alert, market });
+      }
+    }
+    // Build price history for trend detection
+    await updatePriceHistory(runtime, markets);
+  }
+});
+```
+
+**CRE capabilities used:**
+- `CronCapability` — Scheduled 5-minute market polling across the DON
+- `HTTPCapability` — Handles inbound API requests for alert creation
+- `runtime.getState/setState` — Persistent state across CRE execution cycles
+- `runtime.emit` — Event-driven webhook dispatch on alert triggers
+
+### Why CRE Over a Simple Cron Job?
+
+| Feature | Traditional Cron | Chainlink CRE |
+|---------|-----------------|----------------|
+| Uptime | Single server | Decentralized DON |
+| State persistence | Database required | Built-in runtime state |
+| Verifiability | Trust the operator | Cryptographic proof |
+| Scalability | Vertical only | Horizontal across nodes |
+| Cost | Server hosting | Per-execution gas |
+
 ## Architecture
 
 ```
-┌──────────────┐     ┌─────────────┐     ┌──────────────┐
-│   User/Bot   │────▶│  API Server │────▶│  Polymarket  │
-│              │◀────│  (Hono)     │◀────│  CLOB API    │
-└──────────────┘     └─────────────┘     └──────────────┘
-       │                    │
-       │ x402               │ CRE Workflow
-       ▼                    ▼
-┌──────────────┐     ┌─────────────┐
-│   Base L2    │     │  Chainlink  │
-│   (USDC)     │     │  Runtime    │
-└──────────────┘     └─────────────┘
+┌──────────────┐     ┌─────────────────────────────────────────┐
+│              │     │          API Server (Hono/Bun)           │
+│   User/Bot   │────▶│                                         │
+│   Dashboard  │◀────│  NLP Parser ─▶ Market Search ─▶ Alert   │
+│              │     │                                Creation  │
+└──────┬───────┘     └──────────────┬──────────────────────────┘
+       │                            │
+       │ x402 Payment               │ CRE Workflow Registration
+       │ (HTTP 402 flow)            │
+       ▼                            ▼
+┌──────────────┐     ┌─────────────────────────────────────────┐
+│   Base L2    │     │         Chainlink CRE Runtime           │
+│   (USDC)     │     │                                         │
+│              │     │  CronCapability ──▶ Market Polling       │
+│  Payment     │     │  HTTPCapability ──▶ Alert API            │
+│  Verification│     │  runtime.state  ──▶ Price History        │
+└──────────────┘     │  runtime.emit   ──▶ Webhook Dispatch     │
+                     └──────────────┬──────────────────────────┘
+                                    │
+                                    ▼
+                     ┌──────────────────────────────────────────┐
+                     │          Polymarket CLOB API             │
+                     │  Market data, outcomes, prices           │
+                     └──────────────────────────────────────────┘
 ```
+
+## Security
+
+The service implements production-grade security controls:
+
+- **SSRF Protection**: Webhook URLs are validated against private/reserved IP ranges (localhost, 10.x, 172.16-31.x, 192.168.x, 169.254.x) to prevent server-side request forgery
+- **Webhook Signatures**: All webhook payloads are signed with HMAC-SHA256, enabling recipients to verify authenticity
+- **Payment Verification**: x402 payment proofs are validated for correct chain ID (8453), token contract, receiver address, and minimum amount before activating alerts
+- **Input Sanitization**: NLP parser validates and normalizes all user input; malformed queries return structured errors rather than exceptions
+- **Rate Limiting**: Market checks are bounded to CRE's 5-minute schedule, preventing API abuse
+- **Memory Bounds**: Price history is capped at 288 data points (~24 hours at 5-min intervals) to prevent unbounded memory growth
+- **Concurrent Safety**: Alert processing isolates per-alert failures — one webhook timeout does not block other alerts
 
 ## Technologies
 
@@ -301,11 +382,18 @@ curl -X POST http://localhost:3000/arbitrage/scan \
 
 Detects overpriced/underpriced markets where outcome prices don't sum to ~100%.
 
-## Future Enhancements
+## Roadmap
 
-- [ ] Integration with AI models for smarter NLP parsing
-- [ ] Cross-chain payment support
-- [ ] Telegram/Discord notification integrations
+**Q2 2026:**
+- Telegram and Discord notification channels (beyond webhooks)
+- Cross-chain x402 payment support (Polygon, Arbitrum, Optimism)
+- AI-powered entity recognition for implicit market references ("the next election" → specific market)
+
+**Q3 2026:**
+- Fine-tuned NLP model trained on Polymarket query patterns
+- Portfolio optimization engine using correlation data
+- Webhook batching for high-volume institutional users
+- Historical alert performance analytics dashboard
 
 ## Author
 
