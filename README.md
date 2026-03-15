@@ -36,6 +36,12 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 - **Conditional Probability**: Bayesian P(B|A) estimates with confidence intervals
 - **Market Maker Detection**: Accumulation, distribution, spread, mean-reversion patterns
 - **Cross-Market Arbitrage**: Mutually exclusive, subset, and complementary opportunity scanning
+- **Backtest Engine**: Simulate alert strategies against historical data with P&L tracking
+  - Strategy builder with entry/exit conditions, stop loss, take profit
+  - Performance metrics: Sharpe ratio, Sortino ratio, max drawdown, profit factor
+  - Monte Carlo simulation for confidence intervals on strategy robustness
+  - Walk-forward optimization for parameter tuning
+  - Strategy comparison and ranking across multiple strategies
 - **Webhook Notifications**: Get notified when your conditions are met
 - **Market Search**: Find prediction markets by keyword
 
@@ -45,7 +51,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (2330 tests across 36 suites)
+# Run unit tests (2476 tests across 37 suites)
 bun test
 
 # Run integration test
@@ -284,6 +290,7 @@ The service implements production-grade security controls:
 │   ├── polymarket-alert-workflow.ts  # CRE workflow
 │   ├── portfolio.ts                  # Portfolio & arbitrage
 │   ├── market-correlation.ts         # Advanced correlation & analytics
+│   ├── backtest-engine.ts            # Strategy backtesting & simulation
 │   └── x402-handler.ts               # Payment handling
 └── package.json
 ```
@@ -388,6 +395,63 @@ curl -X POST http://localhost:3000/arbitrage/scan \
 ```
 
 Detects overpriced/underpriced markets where outcome prices don't sum to ~100%.
+
+## Backtest Engine
+
+The backtest engine lets you simulate alert strategies against historical market data to evaluate their effectiveness before deploying them live.
+
+### Define a Strategy
+
+```typescript
+import { createThresholdStrategy, runBacktest, runMonteCarloSimulation } from './src/backtest-engine';
+
+// Enter when price crosses above 60%, exit when it drops below 40%
+const strategy = createThresholdStrategy('bull-entry', 'Bull Entry', 'market-id', 60, 40);
+```
+
+### Run a Backtest
+
+```typescript
+const result = runBacktest(strategy, priceHistory, {
+  initialCapital: 10000,
+  feeRate: 0.001,    // 0.1% fee per trade
+  slippage: 0.5,     // 0.5pp slippage
+});
+
+console.log(result.metrics);
+// { totalTrades: 12, winRate: 0.667, sharpeRatio: 1.42,
+//   maxDrawdown: 8.5, profitFactor: 2.1, ... }
+```
+
+### Compare Strategies
+
+```typescript
+import { compareStrategies } from './src/backtest-engine';
+
+const comparison = compareStrategies([strategy1, strategy2, strategy3], priceHistory);
+console.log(comparison.rankings);
+// Ranked by composite score (Sharpe, win rate, profit factor, drawdown)
+```
+
+### Monte Carlo Simulation
+
+```typescript
+const mc = runMonteCarloSimulation(backtestResult, 1000);
+console.log(`Profit probability: ${mc.profitProbability * 100}%`);
+console.log(`5th percentile equity: $${mc.equityDistribution.percentile5}`);
+```
+
+### Performance Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Sharpe Ratio | Risk-adjusted return (annualized) |
+| Sortino Ratio | Downside risk-adjusted return |
+| Calmar Ratio | Return / max drawdown |
+| Profit Factor | Gross profit / gross loss |
+| Win Rate | Fraction of profitable trades |
+| Max Drawdown | Largest peak-to-trough decline |
+| Expectancy | Expected P&L per trade |
 
 ## Roadmap
 
