@@ -1,5 +1,7 @@
 # Polymarket Alert Service
 
+[![CI](https://github.com/Fulcria-Labs/polymarket-alert-service/actions/workflows/ci.yml/badge.svg)](https://github.com/Fulcria-Labs/polymarket-alert-service/actions/workflows/ci.yml)
+
 **Chainlink Convergence Hackathon 2026 - AI Agents + Prediction Markets Track**
 
 A prediction market monitoring service that combines Chainlink CRE workflows with x402 micropayments, enabling users to subscribe to custom alerts for prediction market conditions.
