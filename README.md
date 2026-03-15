@@ -1,6 +1,6 @@
 # Polymarket Alert Service
 
-[![CI](https://github.com/Fulcria-Labs/polymarket-alert-service/actions/workflows/ci.yml/badge.svg)](https://github.com/Fulcria-Labs/polymarket-alert-service/actions/workflows/ci.yml)
+[![CI](https://github.com/Fulcria-Labs/polymarket-alert-service/actions/workflows/test.yml/badge.svg)](https://github.com/Fulcria-Labs/polymarket-alert-service/actions/workflows/test.yml)
 
 **Chainlink Convergence Hackathon 2026 - AI Agents + Prediction Markets Track**
 
