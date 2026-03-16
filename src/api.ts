@@ -6,6 +6,9 @@
  * - GET /alerts - List user's alerts
  * - GET /markets/search?q=query - Search prediction markets
  * - GET /health - Health check
+ * - GET /feeds - List all supported Chainlink price feeds
+ * - GET /feeds/:pair - Get latest Chainlink price feed data
+ * - POST /alerts/hybrid - Create hybrid alert combining oracle + market conditions
  */
 
 import { Hono } from 'hono';
@@ -15,6 +18,8 @@ import type { PriceSnapshot } from './polymarket-alert-workflow';
 import { createPortfolio, calculatePortfolioPerformance, recordPortfolioSnapshot, buildCorrelationMatrix, detectDivergences, scanForArbitrage } from './portfolio';
 import type { Portfolio, PortfolioSnapshot } from './portfolio';
 import x402 from './x402-handler';
+import { CHAINLINK_FEEDS, ChainlinkPriceFeed, createHybridAlert, evaluateHybridAlert } from './chainlink-data-feeds';
+import type { HybridAlertConfig } from './chainlink-data-feeds';
 
 // Initialize state (would be persisted in production)
 const state: {
@@ -25,6 +30,7 @@ const state: {
   priceHistory: Record<string, PriceSnapshot[]>;
   portfolios: Map<string, Portfolio>;
   portfolioSnapshots: Map<string, PortfolioSnapshot[]>;
+  hybridAlerts: HybridAlertConfig[];
 } = {
   alertConfigs: [],
   lastChecked: {},
@@ -33,7 +39,11 @@ const state: {
   priceHistory: {},
   portfolios: new Map(),
   portfolioSnapshots: new Map(),
+  hybridAlerts: [],
 };
+
+// Shared Chainlink price feed instance (uses Base by default; no live provider in demo)
+const priceFeed = new ChainlinkPriceFeed({ network: 'base' });
 
 const app = new Hono();
 
@@ -503,6 +513,111 @@ app.post('/arbitrage/scan', async (c) => {
   return c.json({
     scannedCount: markets.length,
     opportunities,
+  });
+});
+
+// --- Chainlink Price Feeds ---
+
+// List all supported feeds
+app.get('/feeds', (c) => {
+  const feeds = Object.values(CHAINLINK_FEEDS).map(f => ({
+    id: f.id,
+    description: f.description,
+    decimals: f.decimals,
+    category: f.category,
+    heartbeatSeconds: f.heartbeatSeconds,
+    networks: Object.keys(f.addresses),
+  }));
+  return c.json({ count: feeds.length, feeds });
+});
+
+// Get latest price for a specific feed (e.g., /feeds/ETH-USD)
+app.get('/feeds/:pair', async (c) => {
+  const pair = c.req.param('pair').toUpperCase();
+  const feed = CHAINLINK_FEEDS[pair];
+
+  if (!feed) {
+    return c.json({
+      error: `Unknown feed: ${pair}`,
+      supported: Object.keys(CHAINLINK_FEEDS),
+    }, 404);
+  }
+
+  // In a live environment we'd call priceFeed.getLatestPrice(pair).
+  // For the demo, return the feed metadata with a note about live access.
+  return c.json({
+    feedId: feed.id,
+    description: feed.description,
+    decimals: feed.decimals,
+    category: feed.category,
+    heartbeatSeconds: feed.heartbeatSeconds,
+    addresses: feed.addresses,
+    note: 'Connect an Ethereum provider (e.g., ethers.js + Base RPC) to fetch live prices via ChainlinkPriceFeed.getLatestPrice()',
+  });
+});
+
+// Create hybrid alert combining oracle + market conditions
+app.post('/alerts/hybrid', async (c) => {
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const {
+    description,
+    oracleConditions = [],
+    marketConditions = [],
+    logic = 'AND',
+    notifyUrl,
+    timeWindowMs,
+  } = body;
+
+  if (!notifyUrl) {
+    return c.json({ error: 'notifyUrl is required' }, 400);
+  }
+
+  try {
+    const alert = createHybridAlert({
+      description,
+      oracleConditions,
+      marketConditions,
+      logic,
+      notifyUrl,
+      timeWindowMs,
+    });
+
+    state.hybridAlerts.push(alert);
+
+    return c.json({
+      success: true,
+      alert: {
+        id: alert.id,
+        description: alert.description,
+        logic: alert.logic,
+        oracleConditionCount: alert.oracleConditions.length,
+        marketConditionCount: alert.marketConditions.length,
+        createdAt: new Date(alert.createdAt).toISOString(),
+      },
+    }, 201);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+// List hybrid alerts
+app.get('/alerts/hybrid', (c) => {
+  return c.json({
+    count: state.hybridAlerts.length,
+    alerts: state.hybridAlerts.map(a => ({
+      id: a.id,
+      description: a.description,
+      logic: a.logic,
+      oracleConditions: a.oracleConditions,
+      marketConditions: a.marketConditions,
+      createdAt: new Date(a.createdAt).toISOString(),
+    })),
   });
 });
 

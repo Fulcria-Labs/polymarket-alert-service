@@ -24,6 +24,14 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 - **Multi-Condition Alerts**: "Alert when Trump > 60% AND Biden < 40%"
 - **Range Alerts**: "Trump between 40% and 60%" — triggers when price enters a range
 - **Smart Keyword Extraction**: Automatically finds relevant markets from your query
+- **Chainlink Price Feeds**: Live oracle prices for ETH, BTC, LINK, MATIC, SOL, AVAX via AggregatorV3Interface
+- **Hybrid Oracle+Market Alerts**: "Alert when BTC > $80,000 AND Bitcoin ETF approval > 70%"
+  - Combines Chainlink Data Feed conditions with prediction market probability conditions
+  - AND/OR logic, staleness detection, confidence scoring
+- **Oracle-Market Correlation**: Pearson correlation between oracle prices and market odds
+- **Oracle-Market Divergence Detection**: Alerts when oracle and market prices decouple
+- **TWAP Computation**: Time-weighted average price over configurable windows
+- **Multi-Feed Aggregation**: Weighted average, median, TWAP across multiple oracle feeds
 - **x402 Micropayments**: Pay $0.01 USDC per alert subscription on Base
 - **Bulk Discounts**: 10% off for 5+ alerts, 20% off for 10+ alerts
 - **Real-Time Monitoring**: CRE workflow checks markets every 5 minutes
@@ -52,7 +60,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (2500 tests across 38 suites)
+# Run unit tests (2708 tests across 40 suites)
 bun test
 
 # Run integration test
@@ -83,6 +91,8 @@ The service includes a built-in web dashboard at `/` that provides:
 | `/markets/:id/trend?outcome=Yes` | GET | Trend analysis & momentum |
 | `/alerts` | POST | Create alert (x402 payment required) |
 | `/alerts` | GET | List your alerts |
+| `/alerts/hybrid` | POST | Create hybrid oracle+market alert |
+| `/alerts/hybrid` | GET | List hybrid alerts |
 | `/payment-info` | GET | Payment instructions |
 | `/pricing?count=10` | GET | Calculate bulk pricing |
 | `/portfolios` | POST | Create portfolio watchlist |
@@ -92,6 +102,8 @@ The service includes a built-in web dashboard at `/` that provides:
 | `/correlation?markets=m1,m2` | GET | Correlation matrix |
 | `/divergences?markets=m1,m2` | GET | Divergence detection |
 | `/arbitrage/scan` | POST | Scan for arbitrage opportunities |
+| `/feeds` | GET | List all supported Chainlink price feeds |
+| `/feeds/:pair` | GET | Get Chainlink feed metadata (e.g., /feeds/ETH-USD) |
 
 ## Creating an Alert
 
