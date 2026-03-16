@@ -22,6 +22,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
   - "Watch Bitcoin ETF approval at 70 cents"
   - "Trump > 70%" (shorthand)
 - **Multi-Condition Alerts**: "Alert when Trump > 60% AND Biden < 40%"
+- **Range Alerts**: "Trump between 40% and 60%" — triggers when price enters a range
 - **Smart Keyword Extraction**: Automatically finds relevant markets from your query
 - **x402 Micropayments**: Pay $0.01 USDC per alert subscription on Base
 - **Bulk Discounts**: 10% off for 5+ alerts, 20% off for 10+ alerts
@@ -51,7 +52,7 @@ A prediction market monitoring service that combines Chainlink CRE workflows wit
 # Install dependencies
 bun install
 
-# Run unit tests (2476 tests across 37 suites)
+# Run unit tests (2500 tests across 38 suites)
 bun test
 
 # Run integration test
@@ -131,6 +132,7 @@ curl -X POST http://localhost:3000/alerts \
 | Comparisons | "Trump > 65%" |
 | Direction keywords | "drops below", "rises above", "falls under" |
 | Multi-condition | "Trump > 60% AND Biden < 40%" |
+| Range alerts | "between 30% and 70%", "stays within 40-60%" |
 | Outcome detection | "No hits 40%" (detects No outcome) |
 
 Response (402 Payment Required):

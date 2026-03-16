@@ -73,9 +73,10 @@ export interface AlertConfig {
   marketId: string;
   outcome: string;      // "Yes" or "No"
   threshold: number;    // 0-100 representing percentage
-  direction: 'above' | 'below';
+  direction: 'above' | 'below' | 'between';
   notifyUrl: string;    // Webhook to call when condition met
-  type?: 'threshold' | 'trend';  // Alert type (default: threshold)
+  type?: 'threshold' | 'trend' | 'range';  // Alert type (default: threshold)
+  thresholdUpper?: number;  // Upper bound for range alerts
   trendDirection?: 'up' | 'down';  // For trend alerts
   trendMinChange?: number;          // Min % change to trigger (e.g., 5 = 5%)
   trendWindow?: number;             // Time window in ms (default: 1 hour)
@@ -126,6 +127,9 @@ function checkAlertCondition(market: PolymarketMarket, config: AlertConfig): boo
 
   if (config.direction === 'above') {
     return currentPrice >= config.threshold;
+  } else if (config.direction === 'between') {
+    const upper = config.thresholdUpper ?? 100;
+    return currentPrice >= config.threshold && currentPrice <= upper;
   } else {
     return currentPrice <= config.threshold;
   }
@@ -712,7 +716,29 @@ export function parseAlertRequest(request: string, notifyUrl: string): AlertConf
         outcome: detectOutcome(m[1]!),
       })
     },
-    // Pattern 4: Simple "X hits Y%"
+    // Pattern 4: Range "X between Y% and Z%" (must be before simple "hits/to" pattern)
+    {
+      regex: /(.+?)\s+(?:between|in\s+range)\s+(\d+(?:\.\d+)?)\s*(%|percent|cents?)?\s*(?:and|to|-)\s*(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/i,
+      extractor: (m) => ({
+        threshold: parseFloat(m[2]!),
+        thresholdUpper: parseFloat(m[4]!),
+        direction: 'between' as const,
+        type: 'range' as const,
+        outcome: detectOutcome(m[1]!),
+      })
+    },
+    // Pattern 5: "X stays within Y-Z%"
+    {
+      regex: /(.+?)\s+(?:stays?\s+(?:within|inside)|(?:is\s+)?within)\s+(\d+(?:\.\d+)?)\s*(%|percent)?\s*(?:and|to|-)\s*(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/i,
+      extractor: (m) => ({
+        threshold: parseFloat(m[2]!),
+        thresholdUpper: parseFloat(m[4]!),
+        direction: 'between' as const,
+        type: 'range' as const,
+        outcome: detectOutcome(m[1]!),
+      })
+    },
+    // Pattern 6: Simple "X hits Y%"
     {
       regex: /(.+?)\s+(hits?|reaches?|at|to)\s+(\d+(?:\.\d+)?)\s*(%|percent|cents?)?/i,
       extractor: (m) => ({
@@ -729,13 +755,21 @@ export function parseAlertRequest(request: string, notifyUrl: string): AlertConf
     if (match) {
       const parsed = extractor(match);
       if (parsed && parsed.threshold !== undefined && parsed.direction) {
-        return {
+        const config: AlertConfig = {
           marketId: '', // Resolved via market search
           outcome: parsed.outcome || 'Yes',
           threshold: parsed.threshold,
           direction: parsed.direction,
           notifyUrl,
         };
+        if ('thresholdUpper' in parsed && parsed.thresholdUpper !== undefined) {
+          config.thresholdUpper = parsed.thresholdUpper as number;
+          config.type = 'range';
+        }
+        if ('type' in parsed && parsed.type) {
+          config.type = parsed.type as 'threshold' | 'trend' | 'range';
+        }
+        return config;
       }
     }
   }
